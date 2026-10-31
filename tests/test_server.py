@@ -132,6 +132,26 @@ class HttpTests(unittest.TestCase):
         self.assertEqual((status, json.loads(body)), (200, graph()))
         self.assertEqual(self.request("POST", "/api/backup", "{}", headers)[0], 200)
 
+    def test_revision_poll_does_not_send_note_content(self):
+        self.store.save(0, graph('private note'))
+        status, body = self.request('GET', '/api/revision')
+        self.assertEqual((status, json.loads(body)), (200, {'revision': 1}))
+        self.assertNotIn(b'private note', body)
+
+    def test_sync_activity_and_explicit_proton_login_enforce_origin(self):
+        self.server.auto_sync = SimpleNamespace(activity=MagicMock(return_value={'ok': True}))
+        self.server.proton = SimpleNamespace(login=MagicMock(return_value={'loginState': 'waiting'}),
+                                            status=MagicMock(return_value={'installed': False, 'loginState': 'idle'}))
+        headers = {'Content-Type': 'application/json', 'Origin': f'http://127.0.0.1:{self.port}'}
+        self.assertEqual(self.request('POST', '/api/sync/activity', '{"client":"test", "busy":true}', headers)[0], 200)
+        self.server.auto_sync.activity.assert_called_once_with({'client': 'test', 'busy': True})
+        bad = {**headers, 'Origin': 'https://external.test'}
+        self.assertEqual(self.request('POST', '/api/sync/proton/login', '{}', bad)[0], 403)
+        self.server.proton.login.assert_not_called()
+        self.assertEqual(self.request('POST', '/api/sync/proton/login', '{}', headers)[0], 200)
+        status, body = self.request('GET', '/api/sync/proton/status')
+        self.assertEqual((status, json.loads(body)['installed']), (200, False))
+
     def test_dns_rebinding_origin_and_form_writes_rejected(self):
         self.assertEqual(self.request("GET", "/api/state", headers={"Host": "evil.example"})[0], 403)
         self.assertEqual(self.request("GET", "/api/state", headers={"Origin": "https://evil.example"})[0], 403)

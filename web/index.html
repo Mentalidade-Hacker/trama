@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/translation.css">
   <link rel="stylesheet" href="/writing.css">
   <link rel="stylesheet" href="/learning.css">
+  <link rel="stylesheet" href="/sync.css">
   <link rel="stylesheet" href="/vendor/katex/katex.min.css">
   <link rel="stylesheet" href="/theme.css">
 </head>
@@ -31,12 +32,12 @@
     <div id="favorites"></div>
     <div class="sidebar-label">PÁGINAS RECENTES</div>
     <div id="recent"></div>
-    <div class="sidebar-bottom"><div class="local-indicator"><i></i> Seu grafo, neste computador</div><button data-action="help">? <span>Guia e atalhos</span></button><button data-action="theme">◐ <span>Aparência</span></button><button data-action="settings">⚙ <span>Dados e backups</span></button></div>
+    <div class="sidebar-bottom"><div class="local-indicator"><i></i> Seu grafo, neste computador</div><button class="sync-indicator" data-sync-open data-sync-indicator><span data-sync-label>Conectar outro computador</span></button><button data-action="help">? <span>Guia e atalhos</span></button><button data-action="theme">◐ <span>Aparência</span></button><button data-action="settings">⚙ <span>Dados e backups</span></button></div>
   </aside>
   <div class="workspace">
     <header class="topbar"><button data-action="toggle-nav" title="Alternar navegação">☰</button><button data-action="back" title="Voltar">←</button><div id="breadcrumb">Meu grafo</div><button class="proof-launch" data-action="proofread" title="Revisar ortografia e gramática · Ctrl Alt L">Abc <span>Revisar</span></button><button class="dictionary-launch" data-dictionary-open title="Consultar palavra · Alt Shift D">Dicionário</button><label class="theme-picker" title="Escolher aparência"><span aria-hidden="true">◐</span><select data-theme-select aria-label="Tema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system">Seguir o sistema</option></select></label><span class="save-status" id="save-status" role="status">Abrindo…</span><button data-action="new" class="new-page">+ Nova página</button></header>
     <div class="panes"><main id="main" tabindex="-1"><div class="loading">Abrindo seu grafo local…</div></main><aside id="right-panel" class="right-panel" hidden></aside></div>
-    <footer><span>TRAMA <span class="version">/ 0.6</span></span><span id="stats"></span><span>Escreva. Conecte. Descubra.</span></footer>
+    <footer><span>TRAMA <span class="version">/ 0.7</span></span><span id="stats"></span><button class="sync-indicator" data-sync-open data-sync-indicator><span data-sync-label role="status" aria-live="polite">Conectar outro computador</span></button></footer>
   </div>
   <dialog id="modal"><div id="modal-content"></div></dialog>
   <div id="toast" role="status" hidden></div>

@@ -1,15 +1,27 @@
 # Trama em mais de um computador com Proton Drive
 
-O Trama continua rodando localmente em cada computador. A pasta de troca guarda cópias completas de notas e anexos; o Proton Drive pode transportar esses arquivos entre suas máquinas. No Trama, você revisa uma cópia recebida antes de aplicá-la.
+O Trama 0.7 pode enviar e receber notas e anexos automaticamente, enquanto estiver aberto nos computadores. Ative a opção uma vez em cada máquina; depois, novas versões seguras chegam sem clicar em Publicar/Receber, e o navegador atualiza as notas quando não há edição pendente.
 
-O mecanismo é de publicação e recebimento de versões. Não é edição colaborativa ao vivo, e não depende de deixar o banco SQLite aberto dentro de uma pasta de nuvem. Um link público do Proton Drive também não transforma o Trama em um aplicativo hospedado.
+O mecanismo usa cópias completas em uma pasta separada do banco. Verifica mudanças periodicamente (aproximadamente 3 segundos para pasta, 10 segundos para Proton direto, além do tempo de transferência). Não oferece edição simultânea letra a letra: alterações concorrentes pausam o recebimento e pedem revisão. Sem internet, as notas ficam locais até a conexão voltar. Um link público do Proton não hospeda o Trama.
+
+## Ativar uma vez e usar automaticamente
+
+1. Instale o Trama 0.7 ou mais recente nas duas máquinas e entre na mesma conta Proton.
+2. Crie uma pasta dedicada para as cópias. No Windows, pode ser uma subpasta de **My files** dentro do Proton Drive; mantenha-a disponível neste dispositivo. Para Proton direto, use uma pasta local vazia como `Trama-Sync` e crie a pasta `Trama` na raiz do Drive pelo site.
+3. Abra **Sincronização** no Trama e informe a pasta local. Escolha **Pasta já sincronizada** se o aplicativo Proton transfere essa pasta; escolha **Proton direto** para usar a CLI oficial no Arch ou no Windows.
+4. Para Proton direto, instale a CLI conforme abaixo, informe o executável caso não esteja no PATH e clique **Entrar no Proton**. Conclua o login no navegador oficial. Use a mesma pasta remota, por exemplo `/my-files/Trama`, nas duas máquinas.
+5. Ative **Sincronização automática** e salve. No segundo computador vazio, as notas chegam sozinhas. Se ele já contém notas, escolha a versão inicial no painel antes de continuar.
+
+O indicador de sincronização informa atividade, falhas e conflitos. Em modo pasta, o Trama confirma apenas a troca local; confira o estado da nuvem no aplicativo Proton. Em modo direto, o Trama executa o transporte e informa falhas. Fechar o servidor Trama interrompe esse serviço. As notas já recebidas continuam no disco.
+
+Se aparecer **conflito**, mantenha as cópias dos dois computadores e revise a escolha. O Trama não escolhe a versão mais recente pela data nem mescla textos divergentes automaticamente. **Receber esta versão** substitui o conteúdo atual, preservando backup e alterações não publicadas. A pasta de versões não é limpa automaticamente e pode crescer, sobretudo com anexos.
 
 ## Escolha como transportar os arquivos
 
 | Situação | Transporte |
 | --- | --- |
 | Já tem uma pasta local sincronizada pelo aplicativo Proton Drive | Escolha uma subpasta dedicada como **Pasta de troca** no Trama. O cliente Proton transfere seus arquivos. |
-| Arch Linux ou transferência manual no Windows | Use o helper fornecido com a CLI oficial do Proton Drive. |
+| Arch Linux ou Proton direto no Windows | Instale a CLI oficial e ative o transporte direto no Trama. Os helpers continuam disponíveis para transferências manuais. |
 | Quer apenas levar uma cópia uma vez | Exporte o cofre ZIP em **Dados e backups**, envie pelo site do Proton Drive e importe no outro computador. |
 
 A [CLI oficial do Proton Drive](https://proton.me/support/drive-cli) tem versões para Linux, Windows e macOS. Ela executa transferências quando solicitada; não é, por si só, um cliente que mantém uma pasta sincronizada continuamente. Consulte a [descrição oficial do funcionamento](https://proton.me/business/drive/cli).
@@ -93,7 +105,7 @@ py -3 .\proton_transfer.py upload $pastaTroca '/my-files/Trama' --cli $protonCli
 py -3 .\proton_transfer.py download '/my-files/Trama' $pastaTroca --cli $protonCli
 ```
 
-## Rotina ao trocar de computador
+## Rotina opcional com o modo automático desativado
 
 1. No computador A, espere o aviso de gravação local e use **Sincronização → Publicar cópia**.
 2. Conclua a transferência pelo cliente de nuvem ou pelo comando `upload`.
@@ -113,7 +125,7 @@ Se os dois computadores produziram alterações a partir da mesma versão, há u
 - Usam a opção `skip` para conflitos da CLI. Não usam comandos de remoção, espelhamento ou substituição.
 - Baixam arquivos novos para uma subpasta `.trama-proton-recebido-*` antes de promovê-los à pasta de troca. Se já existir um arquivo local diferente com o mesmo nome, a operação para e preserva o existente.
 
-As pastas temporárias de recebimento ficam guardadas para inspeção. Depois de conferir que as cópias completas foram recebidas, você pode remover essas subpastas pelo gerenciador de arquivos. Elas não fazem parte dos snapshots publicados.
+No auxiliar manual, as pastas temporárias de recebimento ficam guardadas para inspeção. Depois de conferir que as cópias completas foram recebidas, você pode remover essas subpastas pelo gerenciador de arquivos. No modo automático, apenas os arquivos temporários de uma transferência concluída são removidos; falhas ficam preservadas para inspeção. Essas subpastas não fazem parte dos snapshots publicados.
 
 As estratégias e argumentos usados pelo helper foram conferidos no código oficial de [upload](https://github.com/ProtonDriveApps/sdk/blob/main/cli/src/commands/fileSystem/commandFileSystemUpload.ts), [download](https://github.com/ProtonDriveApps/sdk/blob/main/cli/src/commands/fileSystem/commandFileSystemDownload.ts) e [criação de pasta](https://github.com/ProtonDriveApps/sdk/blob/main/cli/src/commands/fileSystem/commandFileSystemCreateFolder.ts). Se a CLI instalada não anunciar a opção de pular conflitos, o helper interrompe a transferência e orienta a atualização.
 

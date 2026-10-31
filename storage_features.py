@@ -127,6 +127,14 @@ class StorageFeatures:
         return filename
 
     def upload(self, payload):
+        with self.store.sync.lock:
+            result = self._upload(payload)
+        worker = getattr(self.store.sync, 'worker', None)
+        if worker is not None:
+            worker.wake()
+        return result
+
+    def _upload(self, payload):
         if not isinstance(payload, dict):
             raise ValueError("Envie name, type e data para anexar um arquivo.")
         name = clean_name(payload.get("name"))
@@ -253,6 +261,10 @@ class StorageFeatures:
             raise ValueError("Cofre ZIP inválido ou corrompido.") from None
 
     def import_vault(self, payload):
+        with self.store.sync.lock:
+            return self._import_vault(payload)
+
+    def _import_vault(self, payload):
         if not isinstance(payload, dict) or type(payload.get("revision")) is not int or payload["revision"] < 0:
             raise ValueError("Informe a revisão atual ao importar o cofre.")
         content = decode_base64(payload.get("data"), MAX_VAULT_ARCHIVE)

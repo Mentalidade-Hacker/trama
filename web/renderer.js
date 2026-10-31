@@ -26,13 +26,16 @@ export function renderRich(text,ctx,seen=new Set(),owner=null,base=0) {
   const esc=escapeHTML;
   if(seen.size>12)return '<span class="missing">Referência circular ou profunda demais</span>';
   let output='',position=0;
-  const trigger=/\{\{|```|\$\$|\[|!\[|#|\(\(|\*\*|__|\^\^|~~|`/g;
+  const trigger=/https?:\/\/|\{\{|```|\$\$|\[|!\[|#|\(\(|\*\*|__|\^\^|~~|`/gi;
   while(position<text.length) {
     trigger.lastIndex=position;const next=trigger.exec(text);
     if(!next){output+=esc(text.slice(position));break;}
     const start=next.index;output+=esc(text.slice(position,start));const tail=text.slice(start);let consumed=0,html='';
     const macro=macroAt(text,start);
-    if(macro) {
+    const bareURL=tail.match(/^https?:\/\/[^\s<>"']+/i);
+    if(bareURL) {
+      const url=bareURL[0].replace(/[.,;!?]+$/,'');consumed=url.length;html=`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`;
+    } else if(macro) {
       const body=macro.body.trim(),m=body.match(/^(?:\[\[([^\]]+)\]\]|([\w-]+))\s*(?::([\s\S]*))?$/),name=(m?.[1]||m?.[2]||'').toLowerCase(),arg=m?.[3]?.trim()||'';
       consumed=macro.end-start;
       if(name==='todo'||name==='done')html=`<input type="checkbox" class="task" aria-label="Concluir tarefa" data-task="${esc(owner||'')}" data-task-offset="${base+start}" ${name==='done'?'checked':''}>`;
@@ -52,8 +55,8 @@ export function renderRich(text,ctx,seen=new Set(),owner=null,base=0) {
       } else if(name==='button')html=`<button class="secondary" data-template-button="${esc(arg.match(/\(\(([^)]+)\)\)/)?.[1]||'')}" data-template-target="${esc(owner||'')}">Inserir template</button>`;
       else html=esc(text.slice(start,macro.end));
     } else if(tail.startsWith('```')) {
-      const end=text.indexOf('```',start+3);
-      if(end>=0){const content=text.slice(start+3,end),line=content.indexOf('\n'),lang=line>=0?content.slice(0,line):'',code=line>=0?content.slice(line+1):content;consumed=end+3-start;html=`<pre class="code-block"><span>${esc(lang||'código')}</span><code>${esc(code)}</code></pre>`;}
+      const closing=text.indexOf('```',start+3),end=closing<0?text.length:closing;
+      const content=text.slice(start+3,end),line=content.indexOf('\n'),lang=line>=0?content.slice(0,line):'',code=line>=0?content.slice(line+1):content;consumed=(closing<0?end:end+3)-start;html=`<pre class="code-block"><span>${esc(lang||'código')}</span><code>${esc(code)}</code></pre>`;
     } else if(tail.startsWith('$$')) {
       const end=text.indexOf('$$',start+2);if(end>=0){consumed=end+2-start;html=ctx.math(text.slice(start+2,end),false);}
     }

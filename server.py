@@ -21,6 +21,8 @@ import webbrowser
 from proofreader import Proofreader, ProofreaderError
 from storage_features import StorageFeatures, setup as setup_storage, record_history, INLINE_TYPES, MAX_VAULT_REQUEST
 from sync_store import SyncStore, SyncError
+from auto_sync import AutoSync
+from proton_service import ProtonService
 from translation import TranslationService, TranslationError
 from dictionary import DictionaryService, DictionaryError
 
@@ -128,6 +130,10 @@ class Store:
             revision, data = db.execute("SELECT revision, data FROM graph WHERE id=1").fetchone()
         return {"revision": revision, "data": json.loads(data)}
 
+    def revision(self):
+        with self.connect() as db:
+            return db.execute("SELECT revision FROM graph WHERE id=1").fetchone()[0]
+
     def serialize_data(self, data):
         validate(data)
         serialized = json.dumps(data, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
@@ -151,9 +157,12 @@ class Store:
 
     def save(self, revision, data):
         serialized = self.serialize_data(data)
-        with self.connect() as db:
+        with self.sync.lock, self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             new_revision = self.write_in_transaction(db, revision, serialized, data)
+        worker = getattr(self.sync, 'worker', None)
+        if worker is not None:
+            worker.wake()
         return new_revision
 
     def backup(self):
@@ -171,7 +180,7 @@ class Store:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Trama/0.6"
+    server_version = "Trama/0.7"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):
@@ -238,6 +247,12 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed():
             return
         path = urlsplit(self.path).path
+        if path == "/api/revision":
+            self.json_response(200, {"revision": self.server.store.revision()})
+            return
+        if path == "/api/sync/proton/status":
+            self.json_response(200, self.server.proton.status())
+            return
         if path == "/api/dictionary/status":
             self.json_response(200, self.server.dictionary.status())
             return
@@ -382,6 +397,21 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path in ("/api/sync/activity", "/api/sync/proton/login"):
+            if not self.allowed():
+                return
+            try:
+                payload = self.read_json(16 * 1024)
+                if path == "/api/sync/activity":
+                    result = self.server.auto_sync.activity(payload)
+                else:
+                    result = self.server.proton.login(payload)
+                self.json_response(200, result or {"ok": True})
+            except (ValueError, SyncError) as exc:
+                self.json_response(400, {"error": str(exc)})
+            except OSError:
+                self.json_response(503, {"error": "Não foi possível abrir o aplicativo oficial do Proton. Confira o caminho e tente novamente."})
+            return
         if path == "/api/dictionary":
             if not self.allowed():
                 return
@@ -464,8 +494,15 @@ class Server(ThreadingHTTPServer):
         self.dictionary = DictionaryService()
         self.translation = TranslationService(store.directory)
         super().__init__(address, Handler)
+        self.proton = ProtonService(store.sync)
+        self.auto_sync = AutoSync(store)
+        self.auto_sync.start()
 
     def server_close(self):
+        if hasattr(self, 'auto_sync'):
+            self.auto_sync.stop()
+        if hasattr(self, 'proton'):
+            self.proton.close()
         self.translation.close()
         self.proofreader.close()
         super().server_close()

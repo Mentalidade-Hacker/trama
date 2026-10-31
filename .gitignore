@@ -10,6 +10,9 @@
 /attachments/
 /backups/
 /sync/
+/sync-config.json
+/sync-recovery/
+/sync-exchange/
 /vault/
 
 # The generated dictionary is shipped as a release asset, not committed.

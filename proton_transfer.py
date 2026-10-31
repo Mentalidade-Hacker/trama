@@ -1,7 +1,8 @@
-"""Optional manual transport of immutable Trama snapshots using Proton's official CLI.
+"""Opt-in transport of immutable Trama snapshots using Proton's official CLI.
 
 This module never stores credentials and never invokes remote deletion or replacement.
-It does not run unless explicitly called by the user. Authentication belongs to the CLI.
+Manual helpers and the configured automatic worker share the same transport.
+Authentication belongs to the CLI and requires an explicit sign-in action.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 
 SNAPSHOT_NAME = re.compile(r"^([a-f0-9]{32})\.(json|zip)$")
 HEX_HASH = re.compile(r"^[a-f0-9]{64}$")
@@ -35,13 +37,19 @@ def safe_file(path):
     return path.is_file() and not path.is_symlink()
 
 
-def snapshot_pair(folder, snapshot_id):
+def snapshot_pair(folder, snapshot_id, cache=None):
     if not re.fullmatch(r"[a-f0-9]{32}", snapshot_id):
         raise ValueError("Identificador de cópia inválido.")
     folder = Path(folder)
     metadata_path, archive_path = folder / f"{snapshot_id}.json", folder / f"{snapshot_id}.zip"
     if not safe_file(metadata_path) or not safe_file(archive_path):
         raise ValueError(f"Cópia incompleta ou com link simbólico: {snapshot_id}")
+    def signatures():
+        return tuple((p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns, p.stat().st_ino) for p in (metadata_path, archive_path))
+    signature = signatures()
+    cache_key = str(metadata_path.resolve())
+    if cache is not None and cache.get(cache_key) == signature:
+        return archive_path, metadata_path
     if metadata_path.stat().st_size > 1024 * 1024:
         raise ValueError("Metadados da cópia excedem o tamanho permitido.")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -50,10 +58,12 @@ def snapshot_pair(folder, snapshot_id):
     expected_hash = metadata.get("sha256")
     if not isinstance(expected_hash, str) or not HEX_HASH.fullmatch(expected_hash) or file_hash(archive_path) != expected_hash:
         raise ValueError(f"A verificação da cópia falhou: {snapshot_id}. Nenhum arquivo será substituído.")
+    if cache is not None and signatures() == signature:
+        cache[cache_key] = signature
     return archive_path, metadata_path
 
 
-def local_pairs(folder):
+def local_pairs(folder, cache=None):
     folder = Path(folder)
     if not folder.is_dir():
         raise ValueError("Escolha uma pasta local de sincronização existente.")
@@ -65,7 +75,7 @@ def local_pairs(folder):
         archive = folder / f"{match[1]}.zip"
         if not safe_file(archive):
             continue  # In-flight/incomplete pairs are not published.
-        pairs.append(snapshot_pair(folder, match[1]))
+        pairs.append(snapshot_pair(folder, match[1], cache))
     return pairs
 
 
@@ -137,10 +147,10 @@ class ProtonCLI:
         self.call("filesystem", "download", remote_path, str(folder), "--file-conflict-strategy", "skip")
 
 
-def publish_files(cli, folder, remote):
+def publish_files(cli, folder, remote, cache=None):
     folder = Path(folder).resolve()
     remote = remote_folder(remote)
-    pairs = local_pairs(folder)
+    pairs = local_pairs(folder, cache)
     cli.verify_transfer_flags("upload")
     existing = cli.names(remote)
     count = 0
@@ -202,7 +212,7 @@ def install_immutable(source, destination):
         temporary.unlink(missing_ok=True)  # Only the private file created above.
 
 
-def receive_files(cli, remote, folder):
+def receive_files(cli, remote, folder, cache=None, keep_staging=True):
     folder = Path(folder).resolve()
     if not folder.is_dir():
         raise ValueError("Escolha uma pasta local de sincronização existente.")
@@ -214,7 +224,7 @@ def receive_files(cli, remote, folder):
     for snapshot_id in ids:
         metadata, archive = folder / f"{snapshot_id}.json", folder / f"{snapshot_id}.zip"
         if safe_file(metadata) and safe_file(archive):
-            snapshot_pair(folder, snapshot_id)
+            snapshot_pair(folder, snapshot_id, cache)
         else:
             pending.append(snapshot_id)
     if not pending:
@@ -238,6 +248,16 @@ def receive_files(cli, remote, folder):
         for archive, metadata in downloaded:
             install_immutable(archive, folder / archive.name)
             install_immutable(metadata, folder / metadata.name)
+        if not keep_staging:
+            # Remove only the exact private files created by this successful
+            # receive operation. Never recursively delete a user-selected path.
+            for archive, metadata in downloaded:
+                archive.unlink(missing_ok=True)
+                metadata.unlink(missing_ok=True)
+            try:
+                staging.rmdir()
+            except OSError:
+                pass
         return len(downloaded)
     except Exception as error:
         raise ValueError(f"{error}\nArquivos recebidos preservados para inspeção em: {staging}") from error
@@ -245,6 +265,75 @@ def receive_files(cli, remote, folder):
         # Keep staging even after success: no recursive cleanup of a user-selected
         # directory, and the user can remove these expendable receive copies later.
         pass
+
+
+class BackgroundCLI(ProtonCLI):
+    """Bounded, quiet subprocesses; no authentication prompts during polling."""
+    def __init__(self, executable):
+        super().__init__(executable)
+        self._process = None
+        self._lock = threading.Lock()
+        self._stopped = threading.Event()
+        self._verified = set()
+
+    def call(self, *args, capture=False):
+        if self._stopped.is_set():
+            raise ValueError("Transferência interrompida.")
+        if os.environ.get('PROTON_DRIVE_CREDENTIALS_STORE') == 'unsafe_file':
+            raise ValueError("Configure o cofre de credenciais do sistema para conectar o Proton.")
+        options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+        with self._lock:
+            if self._stopped.is_set():
+                raise ValueError("Transferência interrompida.")
+            process = subprocess.Popen([self.executable, *args], stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       text=True, encoding='utf-8', errors='replace', **options)
+            self._process = process
+        try:
+            output, error = process.communicate(timeout=60)
+            if process.returncode:
+                # CLI diagnostics can contain account information. Never return
+                # raw stdout/stderr to the browser or logs.
+                auth_error = any(word in error.lower() for word in ('auth', 'log in', 'login', 'credential', 'keychain', 'secret'))
+                if auth_error:
+                    raise ValueError("Conecte sua conta em Sincronização → Entrar no Proton e confira o cofre de credenciais do sistema.")
+                raise ValueError("Não foi possível acessar o Proton. Confira a internet e se a pasta remota existe. O Trama tentará novamente.")
+            return output if capture else None
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise ValueError("O Proton demorou para responder. Suas notas continuam locais; o envio será tentado novamente.") from None
+        finally:
+            with self._lock:
+                if self._process is process:
+                    self._process = None
+
+    def verify_transfer_flags(self, operation):
+        if operation not in self._verified:
+            super().verify_transfer_flags(operation)
+            self._verified.add(operation)
+
+    def close(self):
+        self._stopped.set()
+        with self._lock:
+            if self._process is not None and self._process.poll() is None:
+                self._process.kill()
+
+
+class ProtonTransport:
+    """Transport for AutoSync. Authentication is a separate explicit action."""
+    def __init__(self, config):
+        self.cli = BackgroundCLI(find_cli(config.get('cliPath') or None))
+        self.cache = {}
+
+    def download(self, folder, config):
+        return receive_files(self.cli, config['remoteFolder'], folder, self.cache, keep_staging=False)
+
+    def upload(self, folder, config):
+        return publish_files(self.cli, folder, config['remoteFolder'], self.cache)
+
+    def close(self):
+        self.cli.close()
 
 
 def main(argv=None):

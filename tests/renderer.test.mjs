@@ -26,3 +26,17 @@ test('macro parser ignores braces inside page titles and balances quoted escapes
   assert.equal(macroAt(text,0).body,'query: [[Curly { page]]');
   assert.match(renderRich(text,ctx),/QUERY\(\[\[Curly \{ page\]\]\)/);
 });
+
+test('bare URLs are clickable without interpreting fragments as graph links',()=>{
+  const html=renderRich('See https://example.test/path#tag and HTTPS://example.test/[[page]].',ctx);
+  assert.match(html,/href="https:\/\/example.test\/path#tag"/);
+  assert.match(html,/href="HTTPS:\/\/example.test\/\[\[page\]\]"/);
+  assert.ok(!html.includes('data-page='));
+});
+
+test('unfinished fenced code stays literal instead of activating note markup',()=>{
+  const html=renderRich('```js\n[[Example]] {{query: [[Other]]}}',ctx);
+  assert.match(html,/<code>\[\[Example\]\]/);
+  assert.ok(!html.includes('data-page='));
+  assert.ok(!html.includes('QUERY('));
+});

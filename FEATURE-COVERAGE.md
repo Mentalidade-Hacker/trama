@@ -1,17 +1,17 @@
-# Cobertura funcional — Trama 0.6
+# Cobertura funcional — Trama 0.7
 
 Este documento descreve os arquivos entregues. **Completo no escopo** indica que o fluxo local descrito está implementado, sem afirmar equivalência integral com o Roam. **Parcial** lista diferenças. **Ausente** significa não incluído. Não há porcentagem de paridade.
 
-Referências de comportamento consultadas: [Table](https://roamdocs.fyi/help/table), [Query](https://roamdocs.fyi/help/query) e [Block References](https://roamdocs.fyi/help/block-references), cuja documentação inclui referências, aliases e conversão em incorporações. Os limites abaixo vêm da implementação do Trama.
+Esta revisão cobre os fluxos de escrita, hierarquia, ligações, referências, consultas e troca entre computadores implementados no Trama. Não houve comparação automatizada contra uma conta Roam. O [Roam Research](https://roamresearch.com/) e seu [catálogo oficial de extensões](https://github.com/Roam-Research/roam-depot) continuam produtos e ecossistemas separados. Os estados e limites abaixo vêm da implementação e dos testes do Trama.
 
 ## Conteúdo e conexões
 
 | Função | Estado | Entregue e limites |
 | --- | --- | --- |
 | Aparência | Completo no escopo | Claro (padrão sem preferência), Escuro opcional e Seguir o sistema. Preferência local por navegador, aplicada antes da primeira exibição e atualizada entre janelas da mesma origem. Mídia preserva suas cores. |
-| Páginas, links e tags | Completo no escopo | Criação, navegação, autocomplete, backlinks e atualização ao renomear. Sem apresentação configurável de namespaces. |
+| Páginas, links e tags | Completo no escopo | Criação, navegação, autocomplete, backlinks e atualização ao renomear. Código, fórmulas, URLs e rótulos de aliases não criam conexões falsas nem são alterados ao renomear. Sem apresentação configurável de namespaces. |
 | Menções sem link | Completo no escopo | Busca textual e ação de vincular; sem detecção semântica. |
-| Blocos hierárquicos | Completo no escopo | IDs estáveis, recuo, recolhimento, foco, duplicação, reordenação e movimentação entre páginas. |
+| Blocos hierárquicos | Completo no escopo | IDs estáveis, recuo, recolhimento, foco, duplicação, reordenação e movimentação entre páginas. Importação e recuo respeitam o limite de 100 níveis aceito pelo armazenamento. |
 | Referências a blocos | Completo no escopo | Conteúdo vivo e aviso de destino ausente/circular. |
 | Incorporações de blocos/páginas | Parcial | Editáveis sobre os dados originais; sem todas as variantes e conversões do Roam. |
 | Aliases/atributos | Parcial | Rótulos de links e `Nome::` como conexão; sem propriedades tipadas completas. |
@@ -40,7 +40,7 @@ Referências de comportamento consultadas: [Table](https://roamdocs.fyi/help/tab
 | Pomodoro | Parcial | Enquanto a página está aberta; sem agendamento persistente. |
 | Botão de template | Parcial | Insere um template por referência; não executa plugins/macros arbitrários. |
 
-A [documentação de tabelas do Roam](https://roamdocs.fyi/help/table) inclui controles além deste subconjunto. A [documentação de consultas](https://roamdocs.fyi/help/query) também descreve autoria e opções de exibição não assumidas como compatíveis.
+Os componentes e consultas usam blocos reais do grafo local. A tabela descreve o subconjunto entregue, sem assumir compatibilidade com todos os controles, filtros de autoria ou extensões do Roam.
 
 ## Arquivos, recuperação e computadores
 
@@ -52,13 +52,13 @@ A [documentação de tabelas do Roam](https://roamdocs.fyi/help/table) inclui co
 | Anexos externos | Parcial | Links preservados; importação não baixa arquivos da nuvem do Roam. |
 | JSON Trama | Completo no escopo | `version: 1`, IDs, hierarquia e metadados opcionais; sem binários. |
 | JSON Roam | Parcial | Campos suportados de páginas/blocos, UIDs e metadados; não converte todos os componentes. |
-| Markdown e colagem de tópicos | Parcial | Exportação e importação por arquivo/página, mesclagem, até 20 MB de entrada, tópicos/recuos/código e colagem de várias linhas. Sem Markdown completo, front matter ou cópia integral da apresentação. |
+| Markdown e colagem de tópicos | Parcial | Até 20 MB de entrada, tópicos/recuos/código, títulos de blocos e continuação de parágrafos. Exportações marcadas do Trama restauram páginas separadas e referências entre elas; Markdown comum continua uma página por arquivo. Sem Markdown completo, front matter, metadados completos ou cópia integral da apresentação; use JSON/ZIP para fidelidade completa. |
 | Cofre ZIP | Completo no escopo | Estado atual, manifesto, binários, validação, backup e troca transacional. Limites: 110 MB ZIP, 100 MB expandidos e 5.000 anexos. Sem histórico completo/preferências. |
 | Histórico | Completo no escopo | 100 revisões, prévia e restauração como nova revisão; anexos anteriores preservados. |
 | Backup SQLite | Completo no escopo | Cópia consistente e retenção de 20; binários separados. |
-| Conflito entre janelas | Parcial | Recusa sobrescrita antiga; exige resolução consciente. Sem colaboração automática. |
-| Troca entre computadores | Parcial | Snapshots imutáveis, envio/recepção manuais, hash, detecção de ramos e recuperação local antes de substituição. Transporte externo obrigatório; sem edição simultânea mesclada. |
-| Proton Drive | Parcial | Pasta transportada por Proton e auxiliar opcional para a CLI oficial Linux/Windows; sem conta/logon embutido. Nenhuma transferência real com conta foi executada nesta entrega. |
+| Conflito entre janelas | Parcial | Recusa sobrescrita antiga e preserva edição pendente. Atualização de dados recebidos respeita alterações locais; não há mescla colaborativa de texto. |
+| Troca entre computadores | Parcial | Modo automático opcional publica alterações salvas e recebe a próxima versão segura enquanto o Trama está aberto. Usa cópias imutáveis, verificação de integridade e recuperação. Divergências ou primeira associação com conteúdo diferente exigem escolha; não há mescla silenciosa nem garantia de atualização instantânea. |
+| Proton Drive | Parcial | Pasta sincronizada pelo cliente Proton ou transporte automático pela CLI oficial no Windows/Linux, após configuração e login inicial. Sem senha Proton dentro do Trama. A transferência depende da conexão e do serviço; nenhuma transferência real com conta foi executada neste ambiente. |
 | Ortografia ao digitar | Completo no escopo | Hunspell local com quatro variantes incluídas, sublinhados, sugestões por clique e termos aceitos. Campos de notas, tabelas, colunas Kanban e prática. Limite de 20 mil unidades UTF-16 por campo. |
 | Gramática ao digitar PT/EN | Parcial | LanguageTool local opcional, análise após pausa, sugestões individuais e proteção de sintaxe. Motor real testado em PT/EN no Windows; sem regras Premium/IA. |
 | Dicionário de significados | Parcial | Base offline incluída: 401.459 entradas PT e 61.743 Simple English, com classes/exemplos/fontes. Não equivale à cobertura integral do Wiktionary em inglês. |
@@ -72,7 +72,7 @@ A [documentação de tabelas do Roam](https://roamdocs.fyi/help/table) inclui co
 | Função | Estado | Limite |
 | --- | --- | --- |
 | Colaboração/permissões de equipe | Ausente | Sem presença, compartilhamento, comentários multiplayer ou usuários. |
-| Sincronização automática colaborativa | Ausente | A troca manual de snapshots escolhe versões; não une alterações simultâneas. |
+| Mesclagem colaborativa em tempo real | Ausente | O modo automático transfere versões com segurança; não une caracteres editados simultaneamente nos dois computadores. Divergências preservam alternativas e exigem escolha. |
 | Aplicativos móveis | Ausente | Sem Android/iOS ou serviço remoto móvel. |
 | Roam Depot, roam/js e plugins | Ausente | Extensões e scripts Roam não são instalados/executados. |
 | Grafos criptografados | Ausente | Sem criptografia própria dos arquivos locais; a proteção do transporte não substitui proteção do disco. |
@@ -82,6 +82,6 @@ A [documentação de tabelas do Roam](https://roamdocs.fyi/help/table) inclui co
 
 ## Verificação
 
-Há testes para modelo, consultas, metadados, templates, componentes, proteção do corretor, conflitos, histórico, anexos, ZIP, rollback, dois computadores simulados e proteção de sintaxe na tradução. Os testes rodam em Windows. A tradução real PT↔EN, os dicionários ortográficos reais e o LanguageTool real foram verificados no Windows. Respostas controladas do corretor validam aplicação de sugestões, não qualidade linguística.
+Há testes para modelo, consultas, metadados, templates, componentes, proteção do corretor, conflitos, histórico, anexos, ZIP, rollback, dois computadores simulados e proteção de sintaxe na tradução. Os novos testes de ligações/renomeação verificam código, URLs, aliases e fórmulas; os testes Markdown verificam blocos multilinha, cercas de código incompletas e referências entre páginas. A versão 0.6 passou também na verificação automatizada do GitHub em Windows e Ubuntu. A tradução real PT↔EN, os dicionários ortográficos reais e o LanguageTool real foram verificados no Windows. Respostas controladas do corretor validam aplicação de sugestões, não qualidade linguística.
 
 Arch Linux, instaladores nativos, transferência real com conta Proton não foram executados diretamente neste ambiente. Veja [README.md](README.md) e [PROTON-DRIVE.md](PROTON-DRIVE.md). Esta tabela descreve o escopo entregue, sem transformar planos em recursos disponíveis.

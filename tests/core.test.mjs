@@ -113,7 +113,7 @@ test('Markdown export keeps hierarchy, links, multiline blocks and stable IDs', 
   const child = core.newBlock('[[Destino]]');
   data.pages[0].blocks[0].children.push(child);
   const markdown = core.exportMarkdown(data);
-  assert.ok(markdown.startsWith('# Origem\n\n- First\n  second'));
+  assert.ok(markdown.startsWith('<!-- trama-export-v1 -->\n# Origem\n\n- First\n  second'));
   assert.ok(markdown.includes(`  - [[Destino]] ^${child.id}`));
 });
 
@@ -163,4 +163,43 @@ test('merge appends same-title pages and remaps collisions atomically', () => {
   const before = JSON.stringify(data);
   assert.throws(() => core.mergeGraph(data, { version: 2, pages: [] }));
   assert.equal(JSON.stringify(data), before);
+});
+
+test('connections ignore code, math, external links and alias labels', () => {
+  const text = '`[[Code]] #code ((code))`\n```js\n[[Fence]]\nStatus:: code\n((fence))\n```\n$$[[Math]] ((math))$$ [#label](https://example.test/#external) https://example.test/[[URL]] [#label]([[Real]]) [#ref](((block))) {{embed: [[Embedded]]}}';
+  assert.deepEqual(core.extractLinks(text), ['Real', 'Embedded']);
+  assert.deepEqual(core.extractRefs(text), ['block']);
+  assert.deepEqual(core.attributesOf(text), []);
+  assert.equal(core.unlinkedMentionIndex('```\nReal\n``` $$Real$$ [Real]([[Other]])', 'Real'), -1);
+  assert.deepEqual(core.extractLinks('[[https://example.test]] [[Word]]'), ['https://example.test', 'Word']);
+  assert.deepEqual(core.extractLinks('https://example.test?q=1#fragment HTTPS://example.test/#tag'), []);
+  assert.deepEqual(core.extractLinks('```js\n[[Unfinished]] #code ((hidden))'), []);
+});
+
+test('renaming updates active aliases, tags and attributes without changing examples', () => {
+  const data = graph(), block = data.pages[0].blocks[0];
+  block.text = '`[[Destino]]`\n```\nDestino:: example\n[[Destino]]\n```\n$$[[Destino]]$$ [#Destino]([[Destino]]) [Destino](https://example.test/#Destino)\nDestino:: [[Destino]]';
+  core.renamePage(data, data.pages[1].id, 'Novo');
+  assert.equal(block.text, '`[[Destino]]`\n```\nDestino:: example\n[[Destino]]\n```\n$$[[Destino]]$$ [#Destino]([[Novo]]) [Destino](https://example.test/#Destino)\nNovo:: [[Novo]]');
+});
+
+test('literal template tags do not become templates and reference rewriting protects code', () => {
+  const data = graph();
+  data.pages[0].blocks[0].text = '`#roam/templates`';
+  assert.deepEqual(core.listTemplates(data), []);
+  assert.equal(core.rewriteBlockReferences('((old)) `((old))` [label](((old)))', id => `((${id}-new))`), '((old-new)) `((old))` [label](((old-new)))');
+});
+
+test('imports and indentation share the server limit of 100 block levels', () => {
+  const data = graph(), page = data.pages[0];
+  let current = page.blocks[0];
+  for (let i = 1; i < 99; i++) { const child = core.newBlock(String(i)); current.children = [child]; current = child; }
+  const first = core.newBlock('first'), last = core.newBlock('last');
+  current.children = [first, last];
+  assert.doesNotThrow(() => core.importData(data));
+  const before = JSON.stringify(data);
+  assert.equal(core.indentBlock(data, last.id), false);
+  assert.equal(JSON.stringify(data), before);
+  last.children.push(core.newBlock('too deep'));
+  assert.throws(() => core.importData(data), /100 níveis/);
 });

@@ -6,8 +6,48 @@ const sameTitle = (a, b) => fold(a.trim()) === fold(b.trim());
 const now = () => new Date().toISOString();
 const attributePattern = () => /^([ \t]*)(\[\[[^\[\]\r\n]+\]\]|[^:\r\n]+?)::([ \t]*)(.*)$/gmu;
 
+/** Literal syntax must not create graph connections or be rewritten on rename. */
+function literalSpans(text) {
+  const tokens = /```[\s\S]*?(?:```|$)|`[^`\r\n]*`|\$\$[\s\S]*?\$\$|\[([^\]\r\n]+)\]\((\[\[[^\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\))\)|!?\[[^\]\r\n]*\]\((?!\[\[|\(\()[^\s)]+\)|#?\[\[[^\[\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\)|https?:\/\/[^\s<>"']+/giu;
+  const spans = [];
+  for (const match of text.matchAll(tokens)) {
+    if (match[1] !== undefined) {
+      // An alias label is plain text; only its page/block destination is active.
+      spans.push([match.index, match.index + match[1].length + 3]);
+    } else if (!/^#?\[\[|^\(\(/u.test(match[0])) {
+      spans.push([match.index, match.index + match[0].length]);
+    }
+  }
+  return spans;
+}
+
+function outsideLiteral(spans, index, length) {
+  let low = 0, high = spans.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (spans[middle][1] <= index) low = middle + 1;
+    else high = middle;
+  }
+  return low === spans.length || index + length <= spans[low][0];
+}
+
+function activeMatches(text, pattern) {
+  const spans = literalSpans(text);
+  return [...text.matchAll(pattern)].filter(match => outsideLiteral(spans, match.index, match[0].length));
+}
+
+/** Rewrite real references while leaving examples, URLs and formula text intact. */
+function replaceActive(text, pattern, replacer) {
+  const spans = literalSpans(text);
+  return text.replace(pattern, (...args) => {
+    const offset = args[args.length - 2];
+    return outsideLiteral(spans, offset, args[0].length) ? replacer(...args) : args[0];
+  });
+}
+
 export function attributesOf(text) {
-  return [...text.matchAll(attributePattern())].map(match => ({
+  const spans = literalSpans(text);
+  return [...text.matchAll(attributePattern())].filter(match => outsideLiteral(spans, match.index, match[1].length + match[2].length + 2)).map(match => ({
     name: match[2].trim().replace(/^\[\[|\]\]$/g, ''), value: match[4].trim(),
   })).filter(attribute => attribute.name && !/[`{}#]/u.test(attribute.name));
 }
@@ -46,7 +86,7 @@ export function walkBlocks(pages) {
 
 export function extractLinks(text) {
   const titles = new Map();
-  for (const match of text.matchAll(linkPattern())) {
+  for (const match of activeMatches(text, linkPattern())) {
     const title = (match[1] ?? match[2]).trim();
     if (title) titles.set(fold(title), titles.get(fold(title)) ?? title);
   }
@@ -55,7 +95,11 @@ export function extractLinks(text) {
 }
 
 export function extractRefs(text) {
-  return [...new Set([...text.matchAll(/\(\(([A-Za-z0-9_-]+)\)\)/g)].map(match => match[1]))];
+  return [...new Set(activeMatches(text, /\(\(([A-Za-z0-9_-]+)\)\)/g).map(match => match[1]))];
+}
+
+export function rewriteBlockReferences(text, transform) {
+  return replaceActive(text, /\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => transform(id, whole));
 }
 
 export function findPage(data, title) {
@@ -85,7 +129,7 @@ export function unlinkedMentionIndex(text, title) {
   const clean = title.trim();
   if (!clean) return -1;
   const protectedPattern = /\[[^\]\r\n]+\]\(https?:\/\/[^\s)]+\)|`[^`]*`|https?:\/\/\S+|#?\[\[([^\[\]\r\n]+)\]\]|(?<![\p{L}\p{N}_/])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)|\(\([A-Za-z0-9_-]+\)\)/gu;
-  const protectedSpans = [...text.matchAll(protectedPattern)].map(match => [match.index, match.index + match[0].length]);
+  const protectedSpans = [...literalSpans(text), ...[...text.matchAll(protectedPattern)].map(match => [match.index, match.index + match[0].length])];
   const literal = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const wordStart = /^[\p{L}\p{N}_]/u.test(clean);
   const wordEnd = /[\p{L}\p{N}_]$/u.test(clean);
@@ -144,12 +188,14 @@ export function renamePage(data, id, newTitle) {
   if (existing && existing.id !== id) throw new Error('Já existe uma página com esse título.');
   const oldTitle = page.title;
   for (const entry of walkBlocks(data.pages)) {
-    let updated = entry.block.text.replace(linkPattern(), (whole, bracket, tag) => {
+    let updated = replaceActive(entry.block.text, linkPattern(), (whole, bracket, tag) => {
       if (!sameTitle(bracket ?? tag, oldTitle)) return whole;
       if (bracket !== undefined) return `${whole.startsWith('#') ? '#' : ''}[[${cleanTitle}]]`;
       return /^[\p{L}\p{N}_][\p{L}\p{N}_/-]*$/u.test(cleanTitle) ? `#${cleanTitle}` : `#[[${cleanTitle}]]`;
     });
-    updated = updated.replace(attributePattern(), (whole, indent, name, spacing, value) => {
+    const spans = literalSpans(updated);
+    updated = updated.replace(attributePattern(), (whole, indent, name, spacing, value, offset) => {
+      if (!outsideLiteral(spans, offset, indent.length + name.length + 2)) return whole;
       const plain = name.trim().replace(/^\[\[|\]\]$/g, '');
       if (!sameTitle(plain, oldTitle)) return whole;
       const replacement = name.trim().startsWith('[[') || cleanTitle.includes(':') ? `[[${cleanTitle}]]` : cleanTitle;
@@ -168,6 +214,12 @@ export function renamePage(data, id, newTitle) {
 export function indentBlock(data, id) {
   const entry = findBlock(data, id);
   if (!entry || entry.index === 0) return false;
+  const pending = [[entry.block, entry.depth + 1]];
+  while (pending.length) {
+    const [block, depth] = pending.pop();
+    if (depth >= 100) return false;
+    for (const child of block.children) pending.push([child, depth + 1]);
+  }
   const parent = entry.siblings[entry.index - 1];
   entry.siblings.splice(entry.index, 1);
   parent.children.push(entry.block);
@@ -229,7 +281,7 @@ export function importData(raw) {
   }
   function blocksValue(value, depth) {
     if (value === undefined && roam) return [];
-    if (!Array.isArray(value) || (depth > 100 && value.length)) throw new Error('Estrutura de blocos inválida ou profunda demais (máximo: 100 níveis).');
+    if (!Array.isArray(value) || (depth >= 100 && value.length)) throw new Error('Estrutura de blocos inválida ou profunda demais (máximo: 100 níveis).');
     return value.map(block => {
       if (!block || typeof block !== 'object' || Array.isArray(block)) throw new Error('Bloco inválido.');
       if (++count > 200000) throw new Error('O arquivo excede o limite de 200.000 blocos.');
@@ -285,11 +337,11 @@ export function exportMarkdown(data) {
   function blockLines(blocks, depth = 0) {
     return blocks.flatMap(block => {
       const indent = '  '.repeat(depth);
-      const text = block.text.replace(/\n/g, `\n${indent}  `);
+      const text = (block.heading ? '#'.repeat(block.heading) + ' ' : '') + block.text.replace(/\n/g, `\n${indent}  `);
       return [`${indent}- ${text} ^${block.id}`, ...blockLines(block.children, depth + 1)];
     });
   }
-  return data.pages.map(page => `# ${page.title}\n\n${blockLines(page.blocks).join('\n')}\n`).join('\n---\n\n');
+  return '<!-- trama-export-v1 -->\n' + data.pages.map(page => `# ${page.title}\n\n${blockLines(page.blocks).join('\n')}\n`).join('\n---\n\n');
 }
 
 /** Simple AND searches and supported nested Roam clauses share the same evaluator. */
@@ -299,7 +351,7 @@ export function queryBlocks(data, query, options = {}) {
 
 export function listTemplates(data) {
   return walkBlocks(data.pages).flatMap(entry => {
-    const marker = [...entry.block.text.matchAll(linkPattern())].find(match => sameTitle(match[1] ?? match[2], 'roam/templates'));
+    const marker = activeMatches(entry.block.text, linkPattern()).find(match => sameTitle(match[1] ?? match[2], 'roam/templates'));
     return marker ? [{ ...entry, id: entry.block.id, label: entry.block.text.slice(0, marker.index).trim() || entry.page.title }] : [];
   });
 }
@@ -315,13 +367,13 @@ export function instantiateTemplate(data, templateId, targetId, referenceDate = 
   if (!template.block.children.length) throw new Error('Adicione blocos filhos ao modelo antes de inseri-lo.');
   const ids = new Map();
   function clone(block, depth) {
-    if (depth > 100) throw new Error('A inserção excederia 100 níveis de blocos.');
+    if (depth >= 100) throw new Error('A inserção excederia 100 níveis de blocos.');
     const id = uid(); ids.set(block.id, id);
     return { ...block, id, children: block.children.map(child => clone(child, depth + 1)) };
   }
   const blocks = template.block.children.map(block => clone(block, target.depth + 1));
   function rewrite(block) {
-    block.text = block.text.replace(/\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => ids.has(id) ? `((${ids.get(id)}))` : whole)
+    block.text = replaceActive(block.text, /\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => ids.has(id) ? `((${ids.get(id)}))` : whole)
       .replace(/<%(today|tomorrow|yesterday)%>/g, (_, word) => localDate(word === 'tomorrow' ? 1 : word === 'yesterday' ? -1 : 0, referenceDate));
     block.children.forEach(rewrite);
   }
@@ -359,7 +411,7 @@ export function mergeGraph(data, incoming) {
   for (const page of addition.pages) {
     for (const { block } of walkBlocks([page])) {
       block.id = mapping.get(block.id) ?? block.id;
-      block.text = block.text.replace(/\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => mapping.has(id) ? `((${mapping.get(id)}))` : whole);
+      block.text = replaceActive(block.text, /\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => mapping.has(id) ? `((${mapping.get(id)}))` : whole);
     }
     page.id = mapping.get(page.id) ?? page.id;
     const existing = findPage(result, page.title);

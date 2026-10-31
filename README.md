@@ -1,16 +1,16 @@
-# Trama 0.6
+# Trama 0.7
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.6 acrescenta a escolha de aparência **Claro**, **Escuro** ou **Seguir o sistema**, mantendo a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.7 acrescenta **sincronização automática opcional** e atualização das notas na tela do outro computador, além de correções nos links e na importação Markdown. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
-Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline:
+Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Confira o número da versão publicada: a sincronização automática requer **0.7 ou mais recente nos dois computadores**.
 
-- [Trama 0.6 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.6/trama-v0.6-windows-linux.zip).
-- [Trama 0.6 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.6/trama-v0.6-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.6](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.6/trama-v0.6-SHA256.txt).
+- [Trama 0.7 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.7/trama-v0.7-windows-linux.zip).
+- [Trama 0.7 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.7/trama-v0.7-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.7](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.7/trama-v0.7-SHA256.txt).
 
 Extraia o pacote. Com **Python 3.10 ou mais recente** e um navegador atual, abra `start.cmd` no Windows ou execute `bash start.sh` no Arch Linux. Os detalhes estão nas seções abaixo. Os pacotes contêm código-fonte e lançadores, não um executável independente do Python.
 
@@ -205,19 +205,16 @@ O formato continua `version: 1`. IDs e estrutura são preservados; `heading`, `a
 
 ## Usar em outro computador com Proton Drive
 
-O Trama troca **cópias ZIP imutáveis** em uma pasta separada. Não coloca o banco SQLite em uso dentro de uma pasta sincronizada. O transporte dessa pasta é feito pelo Proton Drive ou por outro serviço externo; não há envio automático, login embutido nem mesclagem automática de notas.
+Abra **Sincronização**, escolha uma pasta dedicada e ative **Sincronização automática** em cada computador. Há dois transportes:
 
-1. Configure uma pasta dedicada no painel de sincronização de cada computador.
-2. No computador de origem, salve e use **Enviar cópia**.
-3. Transfira a pasta com o serviço escolhido e aguarde os pares `.zip` + `.json` ficarem completos.
-4. No destino, atualize o status e escolha explicitamente **Receber versão**.
-5. Antes de editar no outro computador, repita a transferência/recepção da versão mais recente.
+- **Pasta já sincronizada:** o aplicativo Proton Drive (ou outro sincronizador) transporta a pasta; o Trama publica e recebe as alterações sozinho.
+- **Proton direto:** instale a [CLI oficial](https://proton.me/support/drive-cli), use **Entrar no Proton** uma vez e indique a mesma pasta remota nos dois computadores. O próprio Trama passa a executar os envios e downloads.
 
-Se o destino contém alterações não enviadas, elas são preservadas em `sync-recovery` antes de receber; o banco também recebe backup. Se dois computadores criam versões a partir da mesma base, o painel indica conflito. Escolha qual conteúdo receber e envie depois uma cópia de resolução. Isso **escolhe uma versão**, sem combinar automaticamente os textos; todas as cópias alternativas continuam disponíveis. Para combinar trabalho dos dois lados, recupere/importe o conteúdo desejado conscientemente antes do envio final.
+Depois dessa configuração, escreva normalmente. Com ambos os servidores Trama abertos, as novas notas e os anexos chegam ao outro computador, e a página aberta é atualizada quando não há edição pendente. A chegada depende do transporte e da conexão: são verificações periódicas, não transmissão a cada tecla. Sem internet, o trabalho permanece local e o Trama tenta novamente depois.
 
-Arquivos incompletos ou com hash incorreto não são aplicados. Nenhuma versão compartilhada é apagada automaticamente. Mantenha cópias independentes: snapshots e checagens reduzem riscos, mas não garantem ausência de perda por falha de disco, exclusão manual ou transporte incorreto.
+O recebimento automático exige uma versão descendente da base atual e nenhuma alteração local concorrente. Se os dois computadores editaram antes de receber as mudanças, o painel pausa e pede uma escolha; não combina os textos automaticamente. Antes de uma escolha manual, alterações locais não publicadas são preservadas em `sync-recovery`, além do backup do banco. Na primeira conexão, um grafo local já preenchido também exige escolha antes de receber outro.
 
-O Proton oferece [CLI oficial para Linux](https://proton.me/support/drive-cli). O pacote inclui um auxiliar opcional e instruções em [PROTON-DRIVE.md](PROTON-DRIVE.md). No Windows, uma pasta do aplicativo Proton Drive pode servir como transporte. Configurar a pasta no Trama não autentica nem conecta sua conta Proton.
+As cópias usam arquivos ZIP/JSON separados do banco em uso. Não sincronize `trama.db` diretamente. Cópias incompletas não são aplicadas, e as versões compartilhadas não são apagadas automaticamente; a pasta cresce com o histórico e os anexos repetidos. Tema e demais preferências exclusivas do navegador não fazem parte dessa sincronização. O [guia do Proton](PROTON-DRIVE.md) explica a configuração e o modo manual opcional. A transferência com uma conta Proton real ainda precisa ser validada na instalação do usuário.
 
 ## Revisão enquanto escreve e dicionário
 
