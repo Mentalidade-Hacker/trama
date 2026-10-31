@@ -46,7 +46,9 @@ class AutoSyncTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Windows runners may return an 8.3 TEMP alias (RUNNER~1), while
+        # SyncStore canonicalizes paths. Fixtures must identify the same files.
+        self.root = Path(self.temp.name).resolve()
         self.folder = self.root / "exchange"
         self.folder.mkdir()
         self.a, self.b = Store(self.root / "a"), Store(self.root / "b")
