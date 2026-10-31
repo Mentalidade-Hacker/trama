@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Trama · Notas conectadas</title>
+  <script src="/theme.js"></script>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/components.css">
+  <link rel="stylesheet" href="/features.css">
+  <link rel="stylesheet" href="/translation.css">
+  <link rel="stylesheet" href="/writing.css">
+  <link rel="stylesheet" href="/learning.css">
+  <link rel="stylesheet" href="/vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#"><img src="/icon.svg" alt="">trama<span>LOCAL</span></a>
+    <button class="search-launch" data-action="search">⌕ <span>Buscar ou criar página</span><kbd>Ctrl K</kbd></button>
+    <nav aria-label="Navegação">
+      <button data-action="daily"><span>▦</span> Notas diárias</button>
+      <button data-action="journals"><span>☷</span> Diário contínuo</button>
+      <button data-feature="calendar"><span>▦</span> Calendário</button>
+      <button data-action="graph"><span>⌘</span> Visão do grafo</button>
+      <button data-action="pages"><span>▤</span> Todas as páginas</button>
+      <button data-learning-open><span>✎</span> Aprender a escrever</button>
+    <button data-feature="templates"><span>▧</span> Templates</button><button data-feature="attachments"><span>⌁</span> Arquivos</button><button data-sync-open><span>⇄</span> Sincronização</button><button data-feature="history"><span>↶</span> Histórico</button></nav>
+    <div class="sidebar-label">ATALHOS <button data-action="new" title="Criar página">+</button></div>
+    <div id="favorites"></div>
+    <div class="sidebar-label">PÁGINAS RECENTES</div>
+    <div id="recent"></div>
+    <div class="sidebar-bottom"><div class="local-indicator"><i></i> Seu grafo, neste computador</div><button data-action="help">? <span>Guia e atalhos</span></button><button data-action="theme">◐ <span>Aparência</span></button><button data-action="settings">⚙ <span>Dados e backups</span></button></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><button data-action="toggle-nav" title="Alternar navegação">☰</button><button data-action="back" title="Voltar">←</button><div id="breadcrumb">Meu grafo</div><button class="proof-launch" data-action="proofread" title="Revisar ortografia e gramática · Ctrl Alt L">Abc <span>Revisar</span></button><button class="dictionary-launch" data-dictionary-open title="Consultar palavra · Alt Shift D">Dicionário</button><label class="theme-picker" title="Escolher aparência"><span aria-hidden="true">◐</span><select data-theme-select aria-label="Tema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system">Seguir o sistema</option></select></label><span class="save-status" id="save-status" role="status">Abrindo…</span><button data-action="new" class="new-page">+ Nova página</button></header>
+    <div class="panes"><main id="main" tabindex="-1"><div class="loading">Abrindo seu grafo local…</div></main><aside id="right-panel" class="right-panel" hidden></aside></div>
+    <footer><span>TRAMA <span class="version">/ 0.6</span></span><span id="stats"></span><span>Escreva. Conecte. Descubra.</span></footer>
+  </div>
+  <dialog id="modal"><div id="modal-content"></div></dialog>
+  <div id="toast" role="status" hidden></div>
+  <input type="file" id="import-file" accept=".json,application/json" hidden>
+  <script src="/vendor/katex/katex.min.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

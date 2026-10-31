@@ -1,0 +1,75 @@
+# Personal graphs, SQLite sidecars, attachments and backups are not source code.
+*.db
+*.sqlite
+*.sqlite3
+*-wal
+*-shm
+*-journal
+/data/
+/userdata/
+/attachments/
+/backups/
+/sync/
+/vault/
+
+# The generated dictionary is shipped as a release asset, not committed.
+/resources/dictionary.sqlite
+
+# Local credentials and private configuration.
+.env
+.env.*
+.envrc
+secrets/
+.secrets/
+.ssh/
+.aws/
+credentials*.json
+service-account*.json
+token.json
+tokens.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Optional downloaded engines, model caches and Python environments.
+/runtime/
+/runtimes/
+/models/
+/downloads/
+/translation/
+/writing/
+/LanguageTool*/
+/jdk*/
+/jre*/
+.venv/
+venv/
+env/
+*.argosmodel
+node_modules/
+
+# Generated work, release archives and local tooling caches.
+/work/
+/dist/
+/build/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.7z
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Keep web/vendor sources, WASM, fonts, complete .aff/.dic dictionaries and
+# license notices. The /dist/ rule above is anchored to the repository root.

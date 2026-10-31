@@ -1,0 +1,58 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      PYTHONUTF8: '1'
+
+    steps:
+      # Current major versions verified against each official actions repository.
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      # Tests use the standard libraries, bundled assets, and temporary fixtures.
+      # No pip/npm install, dictionary download, translation model, or Java needed.
+      - name: Python tests
+        run: python -m unittest discover -s tests -v
+
+      - name: JavaScript tests (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: node --test tests/*.test.mjs
+
+      - name: JavaScript tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $testFiles = @(Get-ChildItem -LiteralPath tests -Filter '*.test.mjs' -File | Sort-Object Name | ForEach-Object { $_.FullName })
+          if ($testFiles.Count -eq 0) { throw 'No JavaScript test files found.' }
+          & node --test @testFiles
+          exit $LASTEXITCODE

@@ -1,0 +1,52 @@
+[
+  {
+    "name": "nspell",
+    "version": "2.1.5",
+    "tarball": "https://registry.npmjs.org/nspell/-/nspell-2.1.5.tgz",
+    "integrity": "sha512-PSStyugKMiD9mHmqI/CR5xXrSIGejUXPlo88FBRq5Og1kO5QwQ5Ilu8D8O5I/SHpoS+mibpw6uKA8rd3vXd2Sg==",
+    "license": "MIT"
+  },
+  {
+    "name": "is-buffer",
+    "version": "2.0.5",
+    "tarball": "https://registry.npmjs.org/is-buffer/-/is-buffer-2.0.5.tgz",
+    "integrity": "sha512-i2R6zNFDwgEHJyQUtJEk0XFi1i0dPFn/oqjK3/vPCcDeJvW5NQ83V8QbicfF1SupOaB0h8ntgBC2YiE7dfyctQ==",
+    "license": "MIT"
+  },
+  {
+    "name": "dictionary-pt",
+    "version": "4.0.0",
+    "tarball": "https://registry.npmjs.org/dictionary-pt/-/dictionary-pt-4.0.0.tgz",
+    "integrity": "sha512-ryJRhAtsaunBWw9grYXmVFftfab8+BCQ5wwh7fUzWO0oYEeMuR1lW2ubu1AHdvxOL32XP+u5wW/XhbFuoFuq8Q==",
+    "license": "(LGPL-3.0 OR MPL-2.0)"
+  },
+  {
+    "name": "dictionary-en",
+    "version": "4.0.0",
+    "tarball": "https://registry.npmjs.org/dictionary-en/-/dictionary-en-4.0.0.tgz",
+    "integrity": "sha512-3NHnE1uq33ZE/CIwaZ6gqxa4BnglHnxeAcTM0GJ7cmtRGcvX9InMK/IqLtYcUMFCUpUNgybH+DzkqdgAo3F1zg==",
+    "license": "(MIT AND BSD)"
+  },
+  {
+    "name": "dictionary-pt-pt",
+    "version": "2.0.0",
+    "tarball": "https://registry.npmjs.org/dictionary-pt-pt/-/dictionary-pt-pt-2.0.0.tgz",
+    "integrity": "sha512-N44fxg2uDhF71Ql20zpe6BpdMlVkOT7oyjltuOhRwb2mx2SX3CJ/lqUE6+/HKZdqaxggqNbM/qv02a+Sa1XQiA==",
+    "license": "(GPL-2.0 OR LGPL-2.1 OR MPL-1.1)"
+  },
+  {
+    "name": "dictionary-en-gb",
+    "version": "3.0.0",
+    "tarball": "https://registry.npmjs.org/dictionary-en-gb/-/dictionary-en-gb-3.0.0.tgz",
+    "integrity": "sha512-gU/dwC9xGYPh/0CCcmGNXO8OwSgOySAqevcSXxADCsgUD+tr6OJ52u7XaC7No7dNssvdUSfVjkzcqLrRZq3kPA==",
+    "license": "(MIT AND BSD)"
+  },
+  {
+    "name": "hunspell-wasm",
+    "version": "0.3.0",
+    "tarball": "https://registry.npmjs.org/hunspell-wasm/-/hunspell-wasm-0.3.0.tgz",
+    "integrity": "sha512-D7/QLaeekJYYlE37D7KBq5v38vL4tQutTFIUBOUGBl0g9la8OUgfSd8+XbwNPV5uYMHS13umXR9MtdAxStpHJg==",
+    "license": "(LGPL-2.0 OR GPL-2.0 OR MPL-1.1)",
+    "gitHead": "8f755ef64e8b047b77b676f9698b3dfa5cb1887d"
+  }
+]

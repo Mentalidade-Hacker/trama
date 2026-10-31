@@ -1,0 +1,226 @@
+/* Loaded last. The root attribute is set before paint; body.dark remains a
+   compatibility hook, so both must receive the same palette. */
+:root[data-theme="dark"],
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] body.dark {
+  color-scheme: dark;
+  --bg: #171d24;
+  --panel: #202934;
+  --side: #1c242e;
+  --line: #3a4858;
+  --ink: #e2e8ef;
+  --muted: #adb9c6;
+  --blue: #a4c9ef;
+  --hover: #2b3a4b;
+  --theme-raised: #273443;
+  --theme-selected: #2b4055;
+  --theme-control-line: #66788c;
+  --theme-focus: #aacff1;
+  --theme-primary: #395e80;
+  --theme-primary-hover: #466f94;
+  --theme-primary-ink: #f1f5fa;
+  --theme-success: #abd0b6;
+  --theme-success-bg: #233a30;
+  --theme-success-line: #567a65;
+  --theme-error: #efb3ad;
+  --theme-error-bg: #3a282c;
+  --theme-error-line: #8a5a5c;
+  --theme-warning: #e8c697;
+  --theme-warning-bg: #3b3327;
+  --theme-warning-line: #92774f;
+  color: var(--ink);
+  background: var(--bg);
+  scrollbar-color: #566779 var(--side);
+}
+
+/* The chooser is intentionally small enough to share the editor toolbar. */
+.theme-picker {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  max-width: 175px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+}
+.theme-picker > span { font-size: 15px; line-height: 1; color: var(--muted); }
+.theme-picker select {
+  width: auto;
+  min-width: 0;
+  max-width: 140px;
+  margin: 0;
+  padding: 4px 3px;
+  border: 0;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.theme-picker:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+.theme-picker select:focus { outline: none; }
+.theme-picker option { color: var(--ink); background: var(--bg); }
+.theme-settings select { width: min(100%, 340px); color: var(--ink); background: var(--bg); }
+.topbar:has(.theme-picker) #breadcrumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+:root[data-theme="dark"] ::selection { background: #3c5873; color: #f3f7fb; }
+:root[data-theme="dark"] :is(input, textarea)::placeholder { color: #a2b0bf; opacity: 1; }
+:root[data-theme="dark"] :is(button, a, input, textarea, select):focus-visible { outline-color: var(--theme-focus); }
+:root[data-theme="dark"] :is(input, textarea, select) { caret-color: var(--ink); }
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] option { color: var(--ink); background-color: var(--bg); }
+:root[data-theme="dark"] .theme-picker select { background: transparent; }
+:root[data-theme="dark"] .theme-picker { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] .theme-picker:focus-within { outline-color: var(--theme-focus); }
+:root[data-theme="dark"] kbd { border-color: #576879; background: var(--panel); color: var(--muted); }
+
+/* Navigation and the outline retain quieter secondary text without going gray
+   enough to disappear against the charcoal background. */
+:root[data-theme="dark"] .brand { color: #d5e5f3; }
+:root[data-theme="dark"] .brand span { border-color: #66788c; color: var(--muted); }
+:root[data-theme="dark"] .search-launch { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] .sidebar-page { color: #bccbd9; }
+:root[data-theme="dark"] :is(.sidebar-label, .sidebar-bottom button, .local-indicator,
+  .topbar > button, #breadcrumb, .page-eyebrow, .page-subtitle, .page-heading > button,
+  .collapse, .block-tools button, .add-block, .editor-hint, .empty-state, .version, footer) { color: var(--muted); }
+:root[data-theme="dark"] .sidebar nav button span,
+:root[data-theme="dark"] .sidebar-page .star { color: #a0b6ca; }
+:root[data-theme="dark"] .sidebar nav button.active,
+:root[data-theme="dark"] .sidebar-page.active { background: var(--theme-selected); color: #d3e5f6; }
+:root[data-theme="dark"] .local-indicator i { background: #98c4a5; }
+:root[data-theme="dark"] .save-status { color: var(--theme-success); }
+:root[data-theme="dark"] .save-status.error { color: var(--theme-error); }
+:root[data-theme="dark"] .bullet::after { background: #9caec0; }
+:root[data-theme="dark"] .block-text.empty:before { color: #a2b0bf; }
+:root[data-theme="dark"] .bracket { color: #8fa8bf; }
+:root[data-theme="dark"] .tag { color: #aac3df; }
+:root[data-theme="dark"] .block-ref { color: #b8d3eb; border-bottom-color: #64819b; }
+:root[data-theme="dark"] .block-ref.missing,
+:root[data-theme="dark"] .missing { color: var(--theme-error); }
+:root[data-theme="dark"] .done { color: #a0acb9; }
+:root[data-theme="dark"] .block-editor { box-shadow: 0 1px 0 #50667d; }
+:root[data-theme="dark"] .block-editor:focus { box-shadow: 0 1px 0 var(--theme-focus); }
+:root[data-theme="dark"] .block-line.drag-target { box-shadow: inset 0 -2px var(--theme-focus); }
+:root[data-theme="dark"] .selected-block > .block-line { background: var(--theme-selected); }
+:root[data-theme="dark"] .references summary { color: #c1d0df; }
+:root[data-theme="dark"] .references summary:before,
+:root[data-theme="dark"] .references summary span,
+:root[data-theme="dark"] .reference-entry:before { color: var(--muted); }
+:root[data-theme="dark"] .embed { border-left-color: #657f98; }
+:root[data-theme="dark"] .block-text .task,
+:root[data-theme="dark"] input[type="range"],
+:root[data-theme="dark"] input[type="checkbox"],
+:root[data-theme="dark"] progress { accent-color: #91b9df; }
+
+/* Controls and modal surfaces. Media, PDFs and attachment content are never
+   inverted, filtered or recolored by the application theme. */
+:root[data-theme="dark"] .primary,
+:root[data-theme="dark"] #learning-dialog .primary {
+  background: var(--theme-primary);
+  color: var(--theme-primary-ink);
+  border-color: #6a89a6;
+}
+:root[data-theme="dark"] .primary:hover:not(:disabled),
+:root[data-theme="dark"] #learning-dialog .primary:hover:not(:disabled) { background: var(--theme-primary-hover); filter: none; }
+:root[data-theme="dark"] .secondary,
+:root[data-theme="dark"] #learning-dialog .secondary { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] .secondary:hover:not(:disabled),
+:root[data-theme="dark"] #learning-dialog .secondary:hover:not(:disabled) { background: var(--hover); border-color: #8fa8bf; }
+:root[data-theme="dark"] :is(.modal-body input[type="text"], .modal-body input[type="date"],
+  .modal-body textarea, .modal-body select, .proof-controls select, .graph-toolbar input,
+  .reference-filter, .learn-toolbar select) { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] #dictionary-search input,
+:root[data-theme="dark"] #dictionary-search select,
+:root[data-theme="dark"] #translation-dialog textarea,
+:root[data-theme="dark"] #learning-dialog textarea { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] #learning-dialog textarea:focus,
+:root[data-theme="dark"] #learning-dialog button:focus-visible,
+:root[data-theme="dark"] #learning-dialog select:focus-visible { outline-color: var(--theme-focus); }
+:root[data-theme="dark"] dialog,
+:root[data-theme="dark"] #learning-dialog { box-shadow: 0 22px 80px #0008; }
+:root[data-theme="dark"] dialog::backdrop,
+:root[data-theme="dark"] #learning-dialog::backdrop { background: #080e16a8; }
+:root[data-theme="dark"] :is(.suggestions, #selection-toolbar, .live-suggestion) { box-shadow: 0 8px 25px #0005; }
+:root[data-theme="dark"] #toast { color: var(--ink); background: #293b4d; border: 1px solid #607991; box-shadow: 0 6px 24px #0006; }
+:root[data-theme="dark"] .danger,
+:root[data-theme="dark"] .component-error { color: var(--theme-error); }
+:root[data-theme="dark"] .error-banner { color: var(--theme-error); background: var(--theme-error-bg); border-color: var(--theme-error-line); }
+:root[data-theme="dark"] .sync-conflict { color: var(--theme-warning); background: var(--theme-warning-bg); border-color: var(--theme-warning-line); }
+:root[data-theme="dark"] .sync-conflict p { color: var(--theme-warning); }
+:root[data-theme="dark"] .sync-head strong:before { color: var(--theme-success); }
+
+/* Highlights and the connected graph. */
+:root[data-theme="dark"] .block-text mark:not(.live-spelling-mark):not(.live-grammar-mark) { background: #4a4029; color: #f0d9a9; }
+:root[data-theme="dark"] .proof-context mark { background: #51422b; color: #f2dbb3; border-bottom-color: #c8a166; }
+:root[data-theme="dark"] .proof-kind { color: var(--theme-warning); }
+:root[data-theme="dark"] .proof-success,
+:root[data-theme="dark"] .translation-ready { color: var(--theme-success); }
+:root[data-theme="dark"] .graph-area line { stroke: #61778c; }
+:root[data-theme="dark"] .graph-area text { fill: var(--ink); }
+:root[data-theme="dark"] .graph-area circle { fill: #91b3d2; stroke: var(--bg); }
+:root[data-theme="dark"] .graph-area g:hover circle,
+:root[data-theme="dark"] .graph-area g:focus-within circle { fill: #c0dcf3; stroke: #698ba9; }
+
+/* Tables and kanban already use surface variables. Their editing affordances
+   need stronger borders/focus than decorative table grid lines. */
+:root[data-theme="dark"] .component-table td textarea:focus { box-shadow: inset 0 -2px var(--theme-focus); }
+:root[data-theme="dark"] .component-toolbar button,
+:root[data-theme="dark"] .component-kanban-column > button,
+:root[data-theme="dark"] .component-card-tools select { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] .component-kanban-column > input:focus-visible { outline: 2px solid var(--theme-focus); outline-offset: 3px; }
+:root[data-theme="dark"] .component-kanban-card { background: #1a222c; }
+:root[data-theme="dark"] .component-slider input { accent-color: #91b9df; }
+
+/* Writing corrections preserve the transparent text mirror. Only the underline
+   colors and the visible suggestion chips change. */
+:root[data-theme="dark"] .live-spelling-mark { text-decoration-color: #eeaaa4; }
+:root[data-theme="dark"] .live-grammar-mark { text-decoration-color: #a0c4ed; }
+:root[data-theme="dark"] .live-spelling-issue { color: #f0b8b2; border-bottom-color: #de948d !important; }
+:root[data-theme="dark"] .live-grammar-issue { color: var(--blue); border-bottom-color: #94b8df !important; }
+:root[data-theme="dark"] .live-replacements button { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] .dictionary-entry blockquote { border-left-color: #6b8ba8; }
+:root[data-theme="dark"] .translation-progress progress { accent-color: #91b9df; }
+:root[data-theme="dark"] .translation-actions .selected { border-color: #7d9bb7; }
+:root[data-theme="dark"] #translation-practice { border-color: #647f99; }
+:root[data-theme="dark"] #translation-practice blockquote { border-left-color: #7899b6; }
+:root[data-theme="dark"] .study-link { border-bottom-color: #7d9bb7; }
+
+/* Study feedback is semantic, with separate charcoal-tinted surfaces instead
+   of the light-mode green, yellow and orange fills. */
+:root[data-theme="dark"] .learn-examples figure,
+:root[data-theme="dark"] .learn-review > blockquote,
+:root[data-theme="dark"] .learn-review-answer > blockquote { border-left-color: #7897b2; }
+:root[data-theme="dark"] .learn-comparison .learn-after { border-color: var(--theme-success-line); background: #21332c; }
+:root[data-theme="dark"] .learn-after > span { color: var(--theme-success); }
+:root[data-theme="dark"] .learn-options button { border-color: var(--theme-control-line); }
+:root[data-theme="dark"] .learn-options button:hover:not(:disabled) { border-color: #97b6d2; }
+:root[data-theme="dark"] .learn-options button.chosen { background: var(--theme-selected); border-color: #a0bfdc; }
+:root[data-theme="dark"] #learning-dialog .learn-options button.answer { background: var(--theme-success-bg); color: var(--theme-success); border-color: #7b9f87; }
+:root[data-theme="dark"] .learn-options button.answer > span { color: var(--theme-success); border-color: #71917d; }
+:root[data-theme="dark"] .learn-feedback.is-correct { border-color: var(--theme-success-line); }
+:root[data-theme="dark"] .learn-error { color: var(--theme-error); background: var(--theme-error-bg); border-color: var(--theme-error-line); }
+:root[data-theme="dark"] .learn-pending { color: var(--theme-warning); background: var(--theme-warning-bg); border-color: var(--theme-warning-line); }
+:root[data-theme="dark"] .learn-success { color: var(--theme-success); border-left-color: #83af92; }
+:root[data-theme="dark"] .learn-empty-mark { color: #a3bdd3; }
+
+@media (max-width: 850px) {
+  :root[data-theme="dark"] .right-panel { box-shadow: -10px 0 32px #0005; }
+}
+@media (max-width: 600px) {
+  .theme-picker { gap: 0; max-width: 110px; padding: 3px 5px; }
+  .theme-picker > span { display: none; }
+  .theme-picker select { max-width: 100px; font-size: 10px; padding: 4px 0; }
+  /* Keep navigation/title on one row, writing/theme/save controls on the next.
+     The save status stays visible instead of being squeezed off-screen. */
+  .topbar:has(.theme-picker) { height: 84px; padding: 7px 10px; gap: 4px 6px; flex-wrap: wrap; }
+  .topbar:has(.theme-picker) #breadcrumb { flex: 1 1 calc(100% - 80px); }
+  .topbar:has(.theme-picker) :is(.proof-launch, .dictionary-launch, .theme-picker, .save-status) { order: 1; }
+  .topbar:has(.theme-picker) .save-status { flex: 1 1 50px; min-width: 0; margin-left: auto; text-align: right; line-height: 1.4; }
+  .workspace:has(.theme-picker) .right-panel { top: 84px; }
+  :root[data-theme="dark"] .mobile-hidden .sidebar { box-shadow: 6px 0 40px #0007; }
+}
