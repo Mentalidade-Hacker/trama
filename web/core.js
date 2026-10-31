@@ -8,7 +8,7 @@ const attributePattern = () => /^([ \t]*)(\[\[[^\[\]\r\n]+\]\]|[^:\r\n]+?)::([ \
 
 /** Literal syntax must not create graph connections or be rewritten on rename. */
 function literalSpans(text) {
-  const tokens = /```[\s\S]*?(?:```|$)|`[^`\r\n]*`|\$\$[\s\S]*?\$\$|\[([^\]\r\n]+)\]\((\[\[[^\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\))\)|!?\[[^\]\r\n]*\]\((?!\[\[|\(\()[^\s)]+\)|#?\[\[[^\[\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\)|https?:\/\/[^\s<>"']+/giu;
+  const tokens = /```[\s\S]*?(?:```|$)|`[^`]+`|\$\$[\s\S]*?\$\$|\[([^\]\r\n]+)\]\((\[\[[^\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\))\)|!?\[[^\]\r\n]*\]\((?!\[\[|\(\()[^\s)]+\)|#?\[\[[^\[\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\)|https?:\/\/[^\s<>"']+/giu;
   const spans = [];
   for (const match of text.matchAll(tokens)) {
     if (match[1] !== undefined) {
@@ -336,12 +336,19 @@ export function importData(raw) {
 export function exportMarkdown(data) {
   function blockLines(blocks, depth = 0) {
     return blocks.flatMap(block => {
-      const indent = '  '.repeat(depth);
-      const text = (block.heading ? '#'.repeat(block.heading) + ' ' : '') + block.text.replace(/\n/g, `\n${indent}  `);
-      return [`${indent}- ${text} ^${block.id}`, ...blockLines(block.children, depth + 1)];
+      const indent = '  '.repeat(depth), heading = block.heading || 0;
+      const lines = block.text.replace(/\r\n?/g, '\n').split('\n');
+      // Explicit boundaries distinguish children from literal lists and unfinished code.
+      // Text remains in the visible outline once; the comment contains structure only.
+      const metadata = JSON.stringify({ id: block.id, depth, lineCount: lines.length, heading });
+      const visible = lines.map((line, index) => index === 0
+        ? `${indent}- ${heading ? '#'.repeat(heading) + ' ' : ''}${line}`
+        : `${indent}  ${line}`);
+      visible[visible.length - 1] += ` ^${block.id}`;
+      return [`${indent}<!-- trama-block-v2 ${metadata} -->`, ...visible, ...blockLines(block.children, depth + 1)];
     });
   }
-  return '<!-- trama-export-v1 -->\n' + data.pages.map(page => `# ${page.title}\n\n${blockLines(page.blocks).join('\n')}\n`).join('\n---\n\n');
+  return '<!-- trama-export-v2 -->\n' + data.pages.map(page => `# ${page.title}\n\n${blockLines(page.blocks).join('\n')}\n`).join('\n---\n\n');
 }
 
 /** Simple AND searches and supported nested Roam clauses share the same evaluator. */

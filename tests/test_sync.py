@@ -118,6 +118,36 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "sync_hash_mismatch")
         self.assertEqual(self.b.read()["revision"], 0)
 
+    def test_snapshot_counts_reject_html_missing_and_invalid_types_without_mutating_notes(self):
+        self.save(self.a, "remote")
+        ident = self.publish(self.a)["id"]
+        manifest = self.folder / f"{ident}.json"
+        original = json.loads(manifest.read_text(encoding="utf-8"))
+        self.save(self.b, "local notes preserved")
+        before = self.b.read()
+        invalid = [None, True, False, -1, 1.5, "1", [], {}, '<a href="https://example.invalid">Injected HTML</a>']
+        for field, maximum in (("pages", 50_000), ("blocks", 200_000)):
+            for value in [*invalid, maximum + 1]:
+                with self.subTest(field=field, value=value):
+                    metadata = dict(original)
+                    metadata[field] = value
+                    manifest.write_text(json.dumps(metadata), encoding="utf-8")
+                    state = self.b.sync.status(refresh=True)
+                    self.assertEqual(state["snapshots"], [])
+                    self.assertEqual(state["incomplete"], 1)
+                    with self.assertRaisesRegex(SyncError, "Contagem"):
+                        self.receive(self.b, ident)
+                    self.assertEqual(self.b.read(), before)
+            metadata = dict(original)
+            del metadata[field]
+            manifest.write_text(json.dumps(metadata), encoding="utf-8")
+            with self.assertRaisesRegex(SyncError, "Contagem"):
+                self.receive(self.b, ident)
+            self.assertEqual(self.b.read(), before)
+        manifest.write_text(json.dumps(original), encoding="utf-8")
+        self.receive(self.b, ident)
+        self.assertEqual(self.b.read()["data"], graph("remote"))
+
     def test_stale_revision_or_invalid_id_never_overwrites_notes(self):
         self.save(self.a, "one")
         with self.assertRaises(Conflict):

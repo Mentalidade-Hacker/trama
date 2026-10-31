@@ -287,6 +287,88 @@ class AutoSyncTests(unittest.TestCase):
         self.assertEqual(self.a.read()["data"], graph("during network"))
         self.assertEqual(list(self.folder.iterdir()), [])
 
+    def test_disabling_automatic_cancels_a_blocked_download_immediately(self):
+        started, released = threading.Event(), threading.Event()
+        class SlowTransport:
+            closed = False
+            def download(self, folder, config):
+                started.set()
+                released.wait(3)
+            def upload(self, folder, config):
+                raise AssertionError("Must not upload after disabling automatic sync")
+            def close(self):
+                self.closed = True
+                released.set()
+        transport = SlowTransport()
+        self.configure(self.a, transport="proton")
+        self.save(self.a, "local notes")
+        worker = self.worker(self.a, lambda config: transport)
+        self.assertTrue(started.wait(2))
+        start = time.monotonic()
+        self.a.sync.configure({"folder": str(self.folder), "automatic": False})
+        self.assertLess(time.monotonic() - start, .5)
+        self.assertTrue(transport.closed)
+        self.eventually(lambda: worker.status()["state"] == "disabled")
+        self.assertEqual(self.a.read()["data"], graph("local notes"))
+        self.assertEqual(list(self.folder.iterdir()), [])
+
+    def test_switching_connection_cancels_old_download_before_using_new_folder(self):
+        started, released, next_started = threading.Event(), threading.Event(), threading.Event()
+        old_uploads = []
+        class ConnectionTransport:
+            def __init__(self, old):
+                self.old, self.closed = old, False
+            def download(self, folder, config):
+                if self.old:
+                    started.set()
+                    released.wait(3)
+                else:
+                    next_started.set()
+            def upload(self, folder, config):
+                if self.old:
+                    old_uploads.append(folder)
+            def close(self):
+                self.closed = True
+                if self.old:
+                    released.set()
+        old = ConnectionTransport(True)
+        fresh = ConnectionTransport(False)
+        self.configure(self.a, transport="proton")
+        worker = self.worker(self.a, lambda config: old if config["remoteFolder"] == "/my-files/Trama" else fresh)
+        self.assertTrue(started.wait(2))
+        destination = self.root / "new-exchange"
+        destination.mkdir()
+        start = time.monotonic()
+        self.a.sync.configure({"folder": str(destination), "remoteFolder": "/my-files/Another"})
+        self.assertLess(time.monotonic() - start, .5)
+        self.assertTrue(old.closed)
+        self.assertTrue(next_started.wait(2))
+        self.assertEqual(old_uploads, [])
+        self.assertFalse(fresh.closed)
+        self.assertEqual(worker._connection_key, worker._connection(self.a.sync.configuration()))
+
+    def test_disabling_during_transport_creation_closes_it_before_network_use(self):
+        started, released, closed = threading.Event(), threading.Event(), threading.Event()
+        class UnusedTransport:
+            def download(self, folder, config):
+                raise AssertionError("Disabled transport must not begin a download")
+            def upload(self, folder, config):
+                raise AssertionError("Disabled transport must not begin an upload")
+            def close(self):
+                closed.set()
+        def factory(config):
+            started.set()
+            released.wait(3)
+            return UnusedTransport()
+        self.configure(self.a, transport="proton")
+        worker = self.worker(self.a, factory)
+        self.assertTrue(started.wait(2))
+        self.a.sync.configure({"folder": str(self.folder), "automatic": False})
+        released.set()
+        self.assertTrue(closed.wait(2))
+        self.eventually(lambda: worker.status()["state"] == "disabled")
+        self.assertEqual(list(self.folder.iterdir()), [])
+
     def test_scan_caches_unchanged_archive_hashes_but_receive_rechecks_bytes(self):
         self.save(self.a, "cached")
         self.a.sync.configure({"folder": str(self.folder)})

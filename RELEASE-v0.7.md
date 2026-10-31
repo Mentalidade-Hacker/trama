@@ -14,11 +14,14 @@ O envio depende da conexão, do tamanho das notas/anexos e do transporte. Não �
 
 ## Escrita e conexões
 
+- **Aa → Tamanho do texto** aumenta ou diminui as letras de 80% a 200%, com prévia imediata, preferência salva neste navegador e botão para restaurar o padrão. Vale para notas, menus, dicionário e exercícios, nos temas claro e escuro.
+- O desfazer dentro dos campos de prática preserva o histórico das notas.
 - Código e fórmulas deixam de criar ligações falsas. Renomear uma página preserva exemplos literais, URLs e rótulos de aliases, enquanto atualiza os destinos reais.
 - URLs soltas passam a ser clicáveis, sem transformar seus fragmentos em tags do grafo.
 - Blocos de código ainda sem fechamento continuam literais.
 - Importação e recuo de blocos respeitam o limite de 100 níveis aceito pelo armazenamento.
 - Markdown preserva parágrafos multilinha, cabeçalhos e cercas de código. Exportações identificadas do Trama voltam como páginas separadas, com referências entre blocos remapeadas entre páginas. JSON/ZIP continuam sendo os formatos para preservar todos os metadados.
+- O formato Markdown identificado também preserva listas literais dentro de um bloco e código ainda sem fechamento, sem absorver os blocos seguintes. Metadados das cópias recebidas passam por validação antes da exibição.
 
 ## Baixar e abrir
 
@@ -33,7 +36,7 @@ Gramática e tradução local mantêm seus instaladores opcionais. Ortografia, e
 
 ## Verificação e limites
 
-Passaram **131 testes JavaScript e 128 testes Python** no Windows. No navegador, duas instâncias independentes trocaram notas, links e blocos hierárquicos automaticamente nos dois sentidos, conservaram dados após reiniciar e preservaram duas edições concorrentes até uma escolha explícita. Os testes também verificam transferência de anexos, retomada após desconexão e proteção durante a digitação.
+Passaram **136 testes JavaScript e 137 testes Python** no Windows. No navegador, duas instâncias independentes trocaram notas, links e blocos hierárquicos automaticamente nos dois sentidos, conservaram dados após reiniciar e preservaram duas edições concorrentes até uma escolha explícita. Os testes também verificam transferência de anexos, retomada após desconexão e proteção durante a digitação. O tamanho do texto foi conferido nos temas claro e escuro, após reabrir a página, entre janelas e a 200% em telas larga e estreita.
 
 A transferência com uma conta Proton real ainda precisa ser validada na instalação do usuário; a instalação em Arch Linux real não foi executada neste ambiente.
 

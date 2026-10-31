@@ -113,8 +113,11 @@ test('Markdown export keeps hierarchy, links, multiline blocks and stable IDs', 
   const child = core.newBlock('[[Destino]]');
   data.pages[0].blocks[0].children.push(child);
   const markdown = core.exportMarkdown(data);
-  assert.ok(markdown.startsWith('<!-- trama-export-v1 -->\n# Origem\n\n- First\n  second'));
+  assert.ok(markdown.startsWith('<!-- trama-export-v2 -->\n# Origem\n\n<!-- trama-block-v2 '));
+  assert.ok(markdown.includes('\n- First\n  second'));
+  assert.ok(markdown.includes(JSON.stringify({id:data.pages[0].blocks[0].id,depth:0,lineCount:2,heading:0})));
   assert.ok(markdown.includes(`  - [[Destino]] ^${child.id}`));
+  assert.ok(markdown.includes(`\n  <!-- trama-block-v2 ${JSON.stringify({id:child.id,depth:1,lineCount:1,heading:0})} -->\n  - [[Destino]]`));
 });
 
 test('attributes link their names and rename without changing values', () => {
@@ -188,6 +191,18 @@ test('literal template tags do not become templates and reference rewriting prot
   data.pages[0].blocks[0].text = '`#roam/templates`';
   assert.deepEqual(core.listTemplates(data), []);
   assert.equal(core.rewriteBlockReferences('((old)) `((old))` [label](((old)))', id => `((${id}-new))`), '((old-new)) `((old))` [label](((old-new)))');
+});
+
+test('multiline inline code and adjacent backticks match renderer literal semantics', () => {
+  const data=graph(),block=data.pages[0].blocks[0];
+  const literal='`first\n[[Destino]] #Destino ((old))\nDestino:: example` and `` [[Destino]] ((old)) ``';
+  block.text=literal+' [[Destino]] ((old))';
+  assert.deepEqual(core.extractLinks(literal),[]);
+  assert.deepEqual(core.extractRefs(literal),[]);
+  assert.deepEqual(core.attributesOf(literal),[]);
+  assert.equal(core.rewriteBlockReferences(block.text,()=> '((new))'),literal+' [[Destino]] ((new))');
+  core.renamePage(data,data.pages[1].id,'Changed');
+  assert.equal(block.text,literal+' [[Changed]] ((old))');
 });
 
 test('imports and indentation share the server limit of 100 block levels', () => {

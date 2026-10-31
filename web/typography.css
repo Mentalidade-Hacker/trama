@@ -1,0 +1,35 @@
+/* Text scales throughout the app; controls may wrap instead of clipping. */
+.text-size-settings{border:0;border-top:1px solid var(--line);padding:22px 0 0;margin:22px 0 0;min-width:0}
+.text-size-settings legend{font-weight:600;padding:0 8px 0 0}
+.text-size-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0}
+.text-size-controls button{border:1px solid var(--line);padding:8px 12px;min-height:40px;min-width:44px}
+.text-size-controls output{font-variant-numeric:tabular-nums;min-width:4em;text-align:center}
+.text-size-settings input[type=range]{width:100%;accent-color:var(--blue);margin:12px 0;min-height:30px}
+.text-size-preview{padding:15px;background:var(--panel);border:1px solid var(--line);border-radius:6px;font-size:1rem;line-height:1.85;overflow-wrap:anywhere}
+.text-size-preview p{margin:0}
+.text-size-launch{font-size:1rem;white-space:nowrap}
+.topbar,.topbar:has(.theme-picker){height:auto;min-height:62px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}
+.topbar>*{max-width:100%}
+#breadcrumb{min-width:60px;overflow-wrap:anywhere}
+.workspace>footer{height:auto;min-height:35px;flex-wrap:wrap;padding-top:6px;padding-bottom:6px}
+.sidebar nav button,.sidebar-bottom button{overflow-wrap:anywhere}
+.sidebar .search-launch{flex-wrap:wrap}
+.sidebar .search-launch span{min-width:0}
+.sidebar .brand{flex-wrap:wrap;overflow-wrap:anywhere}
+.sidebar .brand span{margin-left:0}
+#modal:has(.text-size-settings) .modal-head{position:sticky;top:0;background:var(--bg);z-index:2}
+.collapse,.bullet{height:1.93rem}
+.block-editor,.block-text{min-height:1.93rem}
+.block-editor{overflow-wrap:break-word}
+#dictionary-search{grid-template-columns:minmax(0,1fr) minmax(0,190px) auto}
+#dictionary-search input,#dictionary-search select,#dictionary-search button{height:auto;min-height:40px}
+.theme-picker{max-width:100%}
+.theme-picker select{max-width:100%;min-width:0}
+.modal-actions{flex-wrap:wrap}
+@media(max-width:850px){.workspace .right-panel{top:var(--topbar-height,62px);bottom:var(--footer-height,35px)}}
+@media(max-width:600px){
+  .topbar:has(.theme-picker){min-height:84px}
+  .topbar .text-size-launch{order:1}
+  .workspace:has(.theme-picker) .right-panel{top:var(--topbar-height,84px)}
+  #dictionary-search{grid-template-columns:minmax(0,1fr)}
+}

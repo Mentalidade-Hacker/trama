@@ -11,7 +11,9 @@ if [[ "$(cd -- "$APP_DIR" && pwd -P)" != "$SOURCE_DIR" ]]; then
   cp -R -- "$SOURCE_DIR/web/." "$APP_DIR/web/"
   if [[ -d "$SOURCE_DIR/resources" ]]; then mkdir -p "$APP_DIR/resources"; cp -R -- "$SOURCE_DIR/resources/." "$APP_DIR/resources/"; fi
   cp -- "$SOURCE_DIR/dictionary.py" "$SOURCE_DIR/build_dictionary.py" "$SOURCE_DIR/DICTIONARY.md" "$APP_DIR/"
-  if [[ -f "$SOURCE_DIR/README.md" ]]; then cp -- "$SOURCE_DIR/README.md" "$APP_DIR/"; fi
+  for notice in README.md THIRD-PARTY-NOTICES.md; do
+    if [[ -f "$SOURCE_DIR/$notice" ]]; then cp -- "$SOURCE_DIR/$notice" "$APP_DIR/"; fi
+  done
   for optional in proton-transfer.sh proton_transfer.py PROTON-DRIVE.md FEATURE-COVERAGE.md translation.py translation_worker.py setup_translation.py setup-translation.sh setup-translation.cmd TRANSLATION.md setup_proofreader.py setup-writing.sh setup-writing.cmd WRITING.md LEARNING.md; do
     if [[ -f "$SOURCE_DIR/$optional" ]]; then cp -- "$SOURCE_DIR/$optional" "$APP_DIR/"; fi
   done

@@ -139,6 +139,7 @@ export function setupLiveWriting(ctx) {
     document.querySelector('#live-reset-words').onclick=()=>{ignored={};try{localStorage.removeItem('trama-spell-ignored');}catch{}if(active?.el.isConnected)schedule(active,true);ctx.toast('As palavras aceitas voltaram a ser verificadas.');};
   }
 
+  document.addEventListener('trama:typography',()=>{for(const state of connectedStates)syncMirror(state);});
   document.addEventListener('focusin',event=>{if(event.target.matches?.(selector)){const state=attach(event.target);schedule(state,true);}});
   document.addEventListener('input',event=>{if(event.target.matches?.(selector))schedule(attach(event.target));});
   document.addEventListener('compositionstart',event=>{const state=states.get(event.target);if(state){state.composing=true;clearTimeout(state.spellTimer);clearTimeout(state.grammarTimer);state.sequence++;}});

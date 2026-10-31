@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -75,6 +76,97 @@ class ProtonAutoTests(unittest.TestCase):
             self.assertEqual(receive_files(FakeCLI(remote), '/my-files/Trama', local, keep_staging=False), 1)
             self.assertEqual(list(Path(local).glob('.trama-proton-recebido-*')), [other])
             self.assertEqual((other / 'keep').read_text(), 'keep')
+
+    def test_repeated_automatic_download_failures_leave_no_partial_staging(self):
+        class InterruptedCLI(FakeCLI):
+            def download_file(self, remote_path, folder):
+                (Path(folder) / remote_path.rsplit('/', 1)[1]).write_bytes(b'partial transfer')
+                raise TimeoutError('interrupted fixture')
+        with tempfile.TemporaryDirectory() as local, tempfile.TemporaryDirectory() as remote:
+            pair(remote)
+            kept = Path(local) / '.trama-proton-recebido-user'
+            kept.mkdir()
+            (kept / 'keep.txt').write_text('user data')
+            existing, _ = pair(local, identifier='b' * 32, content=b'existing snapshot')
+            for _ in range(3):
+                with self.assertRaisesRegex(ValueError, 'temporários desta tentativa automática foram removidos'):
+                    receive_files(InterruptedCLI(remote), '/my-files/Trama', local, keep_staging=False)
+            self.assertEqual(list(Path(local).glob('.trama-proton-recebido-*')), [kept])
+            self.assertEqual((kept / 'keep.txt').read_text(), 'user data')
+            self.assertEqual(existing.read_bytes(), b'existing snapshot')
+
+    def test_failed_manual_download_keeps_its_partial_files_for_inspection(self):
+        class InterruptedCLI(FakeCLI):
+            def download_file(self, remote_path, folder):
+                (Path(folder) / remote_path.rsplit('/', 1)[1]).write_bytes(b'manual partial')
+                raise TimeoutError('interrupted fixture')
+        with tempfile.TemporaryDirectory() as local, tempfile.TemporaryDirectory() as remote:
+            pair(remote)
+            with self.assertRaisesRegex(ValueError, 'preservados para inspeção'):
+                receive_files(InterruptedCLI(remote), '/my-files/Trama', local)
+            staging = list(Path(local).glob('.trama-proton-recebido-*'))
+            self.assertEqual(len(staging), 1)
+            self.assertEqual((staging[0] / ('a' * 32 + '.zip')).read_bytes(), b'manual partial')
+
+    def test_automatic_cleanup_keeps_unexpected_files_in_its_staging(self):
+        class InterruptedCLI(FakeCLI):
+            def download_file(self, remote_path, folder):
+                (Path(folder) / remote_path.rsplit('/', 1)[1]).write_bytes(b'partial')
+                (Path(folder) / 'unexpected-user.txt').write_text('preserve')
+                raise TimeoutError('interrupted fixture')
+        with tempfile.TemporaryDirectory() as local, tempfile.TemporaryDirectory() as remote:
+            pair(remote)
+            with self.assertRaisesRegex(ValueError, 'preservados para inspeção'):
+                receive_files(InterruptedCLI(remote), '/my-files/Trama', local, keep_staging=False)
+            staging = list(Path(local).glob('.trama-proton-recebido-*'))
+            self.assertEqual(len(staging), 1)
+            self.assertEqual([path.name for path in staging[0].iterdir()], ['unexpected-user.txt'])
+            self.assertEqual((staging[0] / 'unexpected-user.txt').read_text(), 'preserve')
+
+    def test_transfers_allow_ten_minutes_but_help_and_listing_remain_bounded(self):
+        process = MagicMock(returncode=0)
+        process.communicate.return_value = ('[]', '')
+        with patch('proton_transfer.subprocess.Popen', return_value=process):
+            cli = BackgroundCLI('proton-drive')
+            cli.upload_file(Path('snapshot.zip'), '/my-files/Trama')
+            process.communicate.assert_called_with(timeout=600)
+            cli.download_file('/my-files/Trama/snapshot.zip', Path('local'))
+            process.communicate.assert_called_with(timeout=600)
+            cli.call('filesystem', 'download', '--help', capture=True)
+            process.communicate.assert_called_with(timeout=60)
+            cli.names('/my-files/Trama')
+            process.communicate.assert_called_with(timeout=60)
+
+    def test_shutdown_cancels_an_active_long_transfer_without_waiting_for_timeout(self):
+        started, killed = threading.Event(), threading.Event()
+        process = MagicMock(returncode=None)
+        process.poll.return_value = None
+        def communicate(timeout):
+            self.assertEqual(timeout, 600)
+            started.set()
+            if not killed.wait(2):
+                raise AssertionError('shutdown did not cancel transfer')
+            process.returncode = 1
+            return '', 'stopped'
+        process.communicate.side_effect = communicate
+        process.kill.side_effect = killed.set
+        errors = []
+        cli = BackgroundCLI('proton-drive')
+        def download():
+            try:
+                cli.download_file('/my-files/Trama/snapshot.zip', Path('local'))
+            except Exception as error:
+                errors.append(error)
+        with patch('proton_transfer.subprocess.Popen', return_value=process):
+            thread = threading.Thread(target=download)
+            thread.start()
+            self.assertTrue(started.wait(1))
+            cli.close()
+            thread.join(timeout=1)
+        self.assertFalse(thread.is_alive())
+        process.kill.assert_called_once()
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], ValueError)
 
     def test_signin_urls_are_restricted_to_official_https_hosts(self):
         for url in ('https://account.proton.me/test?code=abc', 'https://account.protonmail.com/test'):

@@ -8,7 +8,7 @@ Esta revisão cobre os fluxos de escrita, hierarquia, ligações, referências, 
 
 | Função | Estado | Entregue e limites |
 | --- | --- | --- |
-| Aparência | Completo no escopo | Claro (padrão sem preferência), Escuro opcional e Seguir o sistema. Preferência local por navegador, aplicada antes da primeira exibição e atualizada entre janelas da mesma origem. Mídia preserva suas cores. |
+| Aparência | Completo no escopo | Claro (padrão sem preferência), Escuro opcional e Seguir o sistema. Tamanho do texto de 80% a 200%, com A−/A+, prévia imediata e restauração do padrão. Preferências locais por navegador, aplicadas antes da primeira exibição e atualizadas entre janelas da mesma origem. Mídia preserva suas cores. |
 | Páginas, links e tags | Completo no escopo | Criação, navegação, autocomplete, backlinks e atualização ao renomear. Código, fórmulas, URLs e rótulos de aliases não criam conexões falsas nem são alterados ao renomear. Sem apresentação configurável de namespaces. |
 | Menções sem link | Completo no escopo | Busca textual e ação de vincular; sem detecção semântica. |
 | Blocos hierárquicos | Completo no escopo | IDs estáveis, recuo, recolhimento, foco, duplicação, reordenação e movimentação entre páginas. Importação e recuo respeitam o limite de 100 níveis aceito pelo armazenamento. |

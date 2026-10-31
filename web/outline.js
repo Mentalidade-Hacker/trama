@@ -33,7 +33,55 @@ export function parseOutline(text,{idMap=new Map(),rewrite=true}={}) {
 function rewriteOutline(blocks,idMap) {
   for(const b of blocks){b.text=rewriteBlockReferences(b.text,(id,all)=>idMap.has(id)?`((${idMap.get(id)}))`:all);rewriteOutline(b.children,idMap);}
 }
+
+/** Read explicit export boundaries instead of interpreting the block's prose as Markdown. */
+function readMarkdownV2(text,{idMap=new Map(),rewrite=true}={}) {
+  const lines=text.replace(/\r\n?/g,'\n').split('\n'),pages=[],stack=[];
+  let page=null,expectPage=true;
+  const invalid=line=>new Error(`Exportação Markdown v2 inválida na linha ${line+1}. Confira os metadados e as linhas dos blocos; nenhum conteúdo foi importado.`);
+  for(let i=1;i<lines.length;i++) {
+    const line=lines[i];
+    if(!line.trim())continue;
+    if(expectPage) {
+      if(!line.startsWith('# '))throw invalid(i);
+      page=newPage(line.slice(2));page.blocks=[];pages.push(page);stack.length=0;expectPage=false;continue;
+    }
+    if(line==='---'){expectPage=true;continue;}
+    const marker=line.match(/^( *)<!-- trama-block-v2 (\{.*\}) -->$/);
+    if(!marker)throw invalid(i);
+    let metadata;
+    try{metadata=JSON.parse(marker[2]);}catch{throw invalid(i);}
+    const {id,depth,lineCount,heading}=metadata;
+    if(typeof id!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(id)||idMap.has(id)||
+      !Number.isInteger(depth)||depth<0||depth>99||depth>stack.length||marker[1].length!==depth*2||
+      !Number.isInteger(lineCount)||lineCount<1||lineCount>lines.length-i-1||
+      !Number.isInteger(heading)||heading<0||heading>3)throw invalid(i);
+    const indent='  '.repeat(depth),content=[];
+    for(let n=0;n<lineCount;n++) {
+      const prefix=n===0?`${indent}- ${heading?'#'.repeat(heading)+' ':''}`:`${indent}  `;
+      const source=lines[++i];
+      if(!source.startsWith(prefix))throw invalid(i);
+      content.push(source.slice(prefix.length));
+    }
+    const suffix=` ^${id}`,last=content.length-1;
+    if(!content[last].endsWith(suffix))throw invalid(i);
+    content[last]=content[last].slice(0,-suffix.length);
+    const block=newBlock(content.join('\n'));if(heading)block.heading=heading;
+    idMap.set(id,block.id);
+    if(depth===0)page.blocks.push(block);else stack[depth-1].children.push(block);
+    stack[depth]=block;stack.length=depth+1;
+  }
+  if(expectPage&&pages.length)throw invalid(lines.length-1);
+  if(rewrite)for(const page of pages)rewriteOutline(page.blocks,idMap);
+  return pages;
+}
+
 export function markdownPage(filename,text,options) {
+  if(/^<!-- trama-export-v2 -->\r?\n/.test(text)){
+    const pages=readMarkdownV2(text,options);
+    if(pages.length>1)throw Error('O arquivo contém várias páginas. Use a importação de todas as páginas.');
+    return pages[0]||newPage(filename.replace(/\.(md|markdown|txt)$/i,'').trim()||'Importado');
+  }
   text=text.replace(/^<!-- trama-export-v1 -->\r?\n/,'');
   let title=filename.replace(/\.(md|markdown|txt)$/i,'').trim()||'Importado';const first=text.match(/^# ([^\r\n]+)\r?\n/);if(first){title=first[1].trim();text=text.slice(first[0].length);}
   const page=newPage(title);page.blocks=parseOutline(text,options);return page;
@@ -41,6 +89,7 @@ export function markdownPage(filename,text,options) {
 
 /** Only split files explicitly exported by Trama; ordinary Markdown stays one page. */
 export function markdownPages(filename,text) {
+  if(/^<!-- trama-export-v2 -->\r?\n/.test(text))return readMarkdownV2(text);
   if(!/^<!-- trama-export-v1 -->\r?\n/.test(text))return [markdownPage(filename,text)];
   const source=text.replace(/^<!-- trama-export-v1 -->\r?\n/,'').replace(/\r\n?/g,'\n');
   if(!source.trim())return [];

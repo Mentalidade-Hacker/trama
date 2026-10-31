@@ -28,6 +28,8 @@ Use o seletor **Tema** na barra superior, ou **Aparência** na barra lateral. O 
 
 O tema escuro usa fundo carvão, texto claro suave, links azuis e cores próprias para alertas, tabelas, grafo, dicionário e exercícios. Imagens e anexos preservam suas cores. A preferência é aplicada ao abrir o aplicativo e fica salva neste navegador; ela não faz parte dos backups ou das cópias de sincronização das notas.
 
+Para aumentar ou diminuir as letras, clique em **Aa** na barra superior ou em **Aparência → Tamanho do texto**. Use **A−**, **A+** ou o controle deslizante entre **80% e 200%**. Notas, menus, dicionário e exercícios mudam imediatamente. **Restaurar padrão** volta a 100%. O tamanho fica salvo neste navegador e pode ser diferente em cada computador, sem alterar suas notas.
+
 ## Abrir no Arch Linux
 
 Requisitos: Python 3.10 ou mais recente e navegador atual. Extraia o pacote, abra um terminal na pasta `trama` e execute:
@@ -193,7 +195,7 @@ O salvamento é automático; confira o indicador antes de fechar. Duas janelas e
 
 JSON aceita Trama e a lista de páginas exportada pelo Roam. Campos desconhecidos podem permanecer como texto e anexos externos não são baixados. A interface oferece substituir ou mesclar páginas; duplicações de IDs na mesclagem são remapeadas, preservando referências internas. Há backup antes da importação.
 
-**Importar Markdown** aceita vários arquivos, até 20 MB no total. Cada arquivo vira uma página, nomeada pelo título `#` inicial quando presente ou pelo nome do arquivo. O conteúdo é mesclado com o grafo, preservando/remapeando IDs e referências conforme necessário. Tópicos, recuos e blocos de código são reconhecidos; não há interpretação completa de Markdown, front matter ou extensões de outros aplicativos.
+**Importar Markdown** aceita vários arquivos, até 20 MB no total. Um arquivo comum vira uma página, nomeada pelo título `#` inicial quando presente ou pelo nome do arquivo. Uma exportação Markdown identificada do Trama restaura suas páginas separadas e referências entre elas. O conteúdo é mesclado com o grafo, preservando/remapeando IDs e referências conforme necessário. Tópicos, recuos e blocos de código são reconhecidos; não há interpretação completa de Markdown, front matter ou extensões de outros aplicativos.
 
 O ZIP deve ter sido exportado pelo Trama: máximo de **110 MB de arquivo**, **100 MB descompactados**, **5.000 anexos** e 20 MB por anexo. Restaurar substitui as notas e acrescenta anexos importados; arquivos anteriores permanecem para o histórico. Caminhos inválidos, hashes incorretos e colisões de ID com outro conteúdo são recusados.
 
@@ -258,4 +260,4 @@ node --test tests/*.test.mjs
 
 Node.js é usado apenas nos testes de desenvolvimento. A aplicação usa Python padrão e recursos HTML/CSS/JavaScript locais, sem compilação. Bibliotecas e licenças ficam em `web/vendor`.
 
-Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A troca manual de snapshots não equivale à sincronização colaborativa do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).
+Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A sincronização automática troca versões completas e pausa quando há divergências; não oferece a edição colaborativa simultânea do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).

@@ -86,8 +86,8 @@ class AutoSync:
     def wake(self):
         self._wake.set()
 
-    def _close_transport(self):
-        transport, self._transport = self._transport, None
+    @staticmethod
+    def _dispose_transport(transport):
         if transport is not None:
             close = getattr(transport, "close", None)
             if callable(close):
@@ -95,6 +95,24 @@ class AutoSync:
                     close()
                 except Exception:
                     pass
+
+    def _close_transport(self):
+        with self._lock:
+            transport, self._transport = self._transport, None
+        self._dispose_transport(transport)
+
+    def configuration_changed(self):
+        # Called after SyncStore releases its lock. Closing the transport kills
+        # the active CLI process; it does not wait for the network timeout and
+        # never holds either store or worker locks while invoking external code.
+        config = self.sync.configuration()
+        transport = None
+        with self._lock:
+            if not config.get("automatic") or self._connection(config) != self._connection_key:
+                transport, self._transport = self._transport, None
+                self._connection_key = None
+        self._dispose_transport(transport)
+        self.wake()
 
     def stop(self):
         self._stop.set()
@@ -116,20 +134,24 @@ class AutoSync:
         return now - self._changed_at >= self.debounce
 
     def _get_transport(self, config):
-        if self._transport is None:
+        with self._lock:
+            transport = self._transport
+        if transport is None:
             if self.transport_factory is not None:
                 transport = self.transport_factory(dict(config))
             else:
                 from proton_transfer import ProtonTransport
                 transport = ProtonTransport(dict(config))
-            # A shutdown may have happened while the factory prepared its client.
-            if not self._active(config):
-                close = getattr(transport, "close", None)
-                if callable(close):
-                    close()
+            # Configuration changes and shutdown may occur while the factory
+            # prepares a client. Publish it under the same lock used to cancel.
+            with self._lock:
+                active = self._active(config)
+                if active:
+                    self._transport = transport
+            if not active:
+                self._dispose_transport(transport)
                 return None
-            self._transport = transport
-        return self._transport
+        return transport
 
     def _cycle(self, config):
         key = self._connection(config)

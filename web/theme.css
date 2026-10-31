@@ -46,7 +46,7 @@
   background: var(--panel);
   color: var(--ink);
 }
-.theme-picker > span { font-size: 15px; line-height: 1; color: var(--muted); }
+.theme-picker > span { font-size: calc(15px * var(--font-scale, 1)); line-height: 1; color: var(--muted); }
 .theme-picker select {
   width: auto;
   min-width: 0;
@@ -56,7 +56,7 @@
   border: 0;
   border-radius: 3px;
   font: inherit;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale, 1));
   line-height: 1.5;
   background: transparent;
   color: var(--ink);
@@ -214,7 +214,7 @@
 @media (max-width: 600px) {
   .theme-picker { gap: 0; max-width: 110px; padding: 3px 5px; }
   .theme-picker > span { display: none; }
-  .theme-picker select { max-width: 100px; font-size: 10px; padding: 4px 0; }
+  .theme-picker select { max-width: 100px; font-size: calc(10px * var(--font-scale, 1)); padding: 4px 0; }
   /* Keep navigation/title on one row, writing/theme/save controls on the next.
      The save status stays visible instead of being squeezed off-screen. */
   .topbar:has(.theme-picker) { height: 84px; padding: 7px 10px; gap: 4px 6px; flex-wrap: wrap; }

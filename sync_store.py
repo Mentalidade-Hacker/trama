@@ -158,7 +158,10 @@ class SyncStore:
             self._save_config()
             self.config_error = None
             self._status_cache = None
-        self._wake()
+        if self.worker is not None:
+            self.worker.configuration_changed()
+        else:
+            self._wake()
         return self.status()
 
     def _fingerprint(self):
@@ -203,6 +206,9 @@ class SyncStore:
             raise SyncError("Ancestrais da versão inválidos.")
         if not isinstance(metadata.get("created"), str) or not isinstance(metadata.get("device"), str) or not ID.fullmatch(metadata["device"]) or type(metadata.get("revision")) is not int:
             raise SyncError("Metadados de origem inválidos.")
+        for field, maximum in (("pages", 50_000), ("blocks", 200_000)):
+            if type(metadata.get(field)) is not int or not 0 <= metadata[field] <= maximum:
+                raise SyncError("Contagem de páginas ou blocos inválida na versão sincronizada.")
         metadata["parents"] = list(dict.fromkeys(parents))
         # Hash files while scanning as a transport may expose a partial ZIP.
         digest = hashlib.sha256()

@@ -212,6 +212,33 @@ def install_immutable(source, destination):
         temporary.unlink(missing_ok=True)  # Only the private file created above.
 
 
+def _clean_automatic_staging(folder, staging, expected_names, identity):
+    """Remove only this attempt's expected files, without following directories.
+
+    Unrecognized files and replaced/symlinked staging directories are preserved.
+    Never recurse through a user-selected folder, even after a failed download.
+    """
+    try:
+        current = staging.stat()
+        if (staging.is_symlink() or staging.parent != folder
+                or (current.st_dev, current.st_ino) != identity):
+            return False
+        for name in expected_names:
+            if not SNAPSHOT_NAME.fullmatch(name):
+                continue
+            path = staging / name
+            try:
+                if path.is_file() and not path.is_symlink():
+                    path.unlink()
+            except OSError:
+                # Continue removing other known temporary files if one is busy.
+                pass
+        staging.rmdir()  # Succeeds only when the private directory is empty.
+        return True
+    except OSError:
+        return False
+
+
 def receive_files(cli, remote, folder, cache=None, keep_staging=True):
     folder = Path(folder).resolve()
     if not folder.is_dir():
@@ -229,13 +256,19 @@ def receive_files(cli, remote, folder, cache=None, keep_staging=True):
             pending.append(snapshot_id)
     if not pending:
         return 0
-    # A fresh staging folder isolates incomplete downloads. It is preserved on
-    # failure for diagnosis; the sync scanner ignores subdirectories.
+    # A fresh staging folder isolates incomplete downloads. Manual transfers
+    # preserve it for inspection; automatic retries discard only their own files.
     staging = Path(tempfile.mkdtemp(prefix=".trama-proton-recebido-", dir=folder))
+    stat = staging.stat()
+    identity = (stat.st_dev, stat.st_ino)
+    expected_names = set()
+    failure = None
+    cleaned = False
     try:
         downloaded = []
         for snapshot_id in pending:
             for extension in ("zip", "json"):
+                expected_names.add(f"{snapshot_id}.{extension}")
                 cli.download_file(f"{remote}/{snapshot_id}.{extension}", staging)
             downloaded.append(snapshot_pair(staging, snapshot_id))
         # Validate every downloaded pair before publishing any metadata.
@@ -248,29 +281,24 @@ def receive_files(cli, remote, folder, cache=None, keep_staging=True):
         for archive, metadata in downloaded:
             install_immutable(archive, folder / archive.name)
             install_immutable(metadata, folder / metadata.name)
-        if not keep_staging:
-            # Remove only the exact private files created by this successful
-            # receive operation. Never recursively delete a user-selected path.
-            for archive, metadata in downloaded:
-                archive.unlink(missing_ok=True)
-                metadata.unlink(missing_ok=True)
-            try:
-                staging.rmdir()
-            except OSError:
-                pass
-        return len(downloaded)
     except Exception as error:
-        raise ValueError(f"{error}\nArquivos recebidos preservados para inspeção em: {staging}") from error
+        failure = error
     finally:
-        # Keep staging even after success: no recursive cleanup of a user-selected
-        # directory, and the user can remove these expendable receive copies later.
-        pass
+        if not keep_staging:
+            cleaned = _clean_automatic_staging(folder, staging, expected_names, identity)
+    if failure is not None:
+        detail = ("Os arquivos temporários desta tentativa automática foram removidos. As cópias existentes permanecem intactas."
+                  if cleaned else f"Arquivos recebidos preservados para inspeção em: {staging}")
+        raise ValueError(f"{failure}\n{detail}") from failure
+    return len(downloaded)
 
 
 class BackgroundCLI(ProtonCLI):
     """Bounded, quiet subprocesses; no authentication prompts during polling."""
-    def __init__(self, executable):
+    def __init__(self, executable, *, command_timeout=60, transfer_timeout=600):
         super().__init__(executable)
+        self.command_timeout = command_timeout
+        self.transfer_timeout = transfer_timeout
         self._process = None
         self._lock = threading.Lock()
         self._stopped = threading.Event()
@@ -290,7 +318,8 @@ class BackgroundCLI(ProtonCLI):
                                        text=True, encoding='utf-8', errors='replace', **options)
             self._process = process
         try:
-            output, error = process.communicate(timeout=60)
+            transfer = len(args) >= 2 and args[0] == "filesystem" and args[1] in ("upload", "download") and "--help" not in args
+            output, error = process.communicate(timeout=self.transfer_timeout if transfer else self.command_timeout)
             if process.returncode:
                 # CLI diagnostics can contain account information. Never return
                 # raw stdout/stderr to the browser or logs.
