@@ -60,12 +60,19 @@ class AutoSync:
             return len(self._leases)
 
     def status(self):
+        """Read transport progress and currently busy browser windows."""
         with self._lock:
             state = dict(self._state)
             state["checkPending"] = self._check_requested
         state["clientsBusy"] = self._clients_busy()
         state["running"] = bool(self._thread and self._thread.is_alive() and not self._stop.is_set())
         return state
+
+    def clients_busy_except(self, client):
+        """Used after the requesting window has explicitly saved before exit."""
+        self._clients_busy()
+        with self._activity_lock:
+            return sum(ident != client for ident in self._leases)
 
     def activity(self, payload):
         if not isinstance(payload, dict) or not isinstance(payload.get("client"), str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", payload["client"]) or type(payload.get("busy")) is not bool:

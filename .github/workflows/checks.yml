@@ -9,6 +9,33 @@ permissions:
   contents: read
 
 jobs:
+  arch:
+    name: Tests (Arch Linux container)
+    runs-on: ubuntu-latest
+    # The host supplies Docker; commands and dependencies below run in Arch.
+    container: archlinux:base-20261025.0.616225
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install Arch dependencies
+        run: pacman -Syu --noconfirm --needed python nodejs git
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Record Arch environment
+        run: |
+          cat /etc/os-release
+          python --version
+          node --version
+      - name: Python tests and installer regression
+        run: python -m unittest discover -s tests -v
+      - name: JavaScript tests
+        run: node --test tests/*.test.mjs
   tests:
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

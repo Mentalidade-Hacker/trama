@@ -14,6 +14,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import threading
 import unicodedata
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote, quote, parse_qs
@@ -28,6 +29,7 @@ from translation import TranslationService, TranslationError
 from dictionary import DictionaryService, DictionaryError
 from learning_drafts import LearningDrafts, DraftConflict, setup_drafts
 from full_backup import FullBackup, FullBackupError, MAX_FULL_BACKUP_REQUEST
+from updater import UpdateService, mark_started
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 32 * 1024 * 1024
@@ -186,7 +188,7 @@ class Store:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Trama/0.9.1"
+    server_version = "Trama/0.10"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):
@@ -253,6 +255,9 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed():
             return
         path = urlsplit(self.path).path
+        if path == '/api/update/status':
+            self.json_response(200, {**self.server.updates.status(), 'canClose': self.server.can_close})
+            return
         if path.startswith('/api/full-backup/recovery/'):
             try:
                 body = self.server.store.full_backup.recovery(path.removeprefix('/api/full-backup/recovery/'))
@@ -423,6 +428,35 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path in ('/api/update/check', '/api/update/settings', '/api/app/close'):
+            if not self.allowed():
+                return
+            try:
+                payload = self.read_json(4096)
+                if not isinstance(payload, dict):
+                    raise ValueError('Pedido inválido.')
+                if path == '/api/app/close':
+                    self.server.prepare_close(payload)
+                    self.json_response(200, {'ok': True, 'message': 'Notas salvas. O Trama está encerrando; abra novamente pelo atalho.'})
+                    threading.Thread(target=self.server.shutdown, daemon=True, name='trama-close').start()
+                else:
+                    if path.endswith('/settings'):
+                        if set(payload) != {'automatic'} or type(payload['automatic']) is not bool:
+                            raise ValueError('Escolha se deseja baixar atualizações automaticamente.')
+                        self.server.updates.configure(payload['automatic'])
+                    else:
+                        if payload:
+                            raise ValueError('A verificação não aceita endereços ou parâmetros externos.')
+                        self.server.updates.check()
+                    self.json_response(200, {**self.server.updates.status(), 'canClose': self.server.can_close})
+            except Conflict as exc:
+                self.json_response(409, {'error': str(exc)})
+            except (ValueError, TypeError) as exc:
+                self.json_response(400, {'error': str(exc)})
+            except OSError:
+                self.json_response(503, {'error': 'Não foi possível guardar a configuração da atualização. Confira espaço e permissões.'})
+            return
+        path = urlsplit(self.path).path
         if path in ('/api/full-backup/export', '/api/full-backup/inspect', '/api/full-backup/restore'):
             if not self.allowed():
                 return
@@ -558,8 +592,12 @@ class Handler(SimpleHTTPRequestHandler):
 class Server(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, store):
+    def __init__(self, address, store, *, update_service=None, can_close=False):
         self.store = store
+        self.updates = update_service or UpdateService(Path(os.environ.get('TRAMA_APP_ROOT') or ROOT), current_root=ROOT)
+        self.can_close = bool(can_close)
+        self.close_requested = False
+        self.close_lock = threading.Lock()
         self.proofreader = Proofreader(store.directory)
         self.dictionary = DictionaryService()
         self.translation = TranslationService(store.directory)
@@ -569,6 +607,8 @@ class Server(ThreadingHTTPServer):
         self.auto_sync.start()
 
     def server_close(self):
+        if hasattr(self, 'updates'):
+            self.updates.stop()
         if hasattr(self, 'auto_sync'):
             self.auto_sync.stop()
         if hasattr(self, 'proton'):
@@ -576,6 +616,20 @@ class Server(ThreadingHTTPServer):
         self.translation.close()
         self.proofreader.close()
         super().server_close()
+
+    def prepare_close(self, payload):
+        if set(payload) != {'revision', 'client'} or type(payload.get('revision')) is not int or not isinstance(payload.get('client'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', payload['client']):
+            raise ValueError('Informe a versão salva e a janela que solicitou o encerramento.')
+        with self.close_lock, self.store.sync.lock:
+            if not self.can_close or self.updates.status().get('state') != 'ready':
+                raise Conflict('Abra o Trama pelo atalho e aguarde uma atualização ficar pronta antes de encerrar por aqui.')
+            if self.close_requested:
+                raise Conflict('O Trama já está encerrando.')
+            if self.store.revision() != payload['revision']:
+                raise Conflict('As notas mudaram em outra janela. Confira e salve a versão atual antes de encerrar.')
+            if self.auto_sync.clients_busy_except(payload['client']):
+                raise Conflict('Há outra janela com edição ou salvamento em andamento. Termine nela antes de encerrar o Trama.')
+            self.close_requested = True
 
 
 def open_window(url, desktop=False):
@@ -622,7 +676,7 @@ def main():
         parser.error("A porta precisa estar entre 1 e 65535.")
     try:
         store = Store(args.data_dir)
-        server = Server(("127.0.0.1", args.port), store)
+        server = Server(("127.0.0.1", args.port), store, can_close=os.environ.get('TRAMA_LAUNCHED') == '1')
         store.backup()
     except (OSError, sqlite3.Error) as exc:
         print(f"Não foi possível iniciar o Trama: {exc}\nSe a porta estiver ocupada, feche a outra instância ou use --port 8766.", file=sys.stderr)
@@ -630,8 +684,13 @@ def main():
     url = f"http://127.0.0.1:{args.port}"
     print(f"Trama: {url}\nNotas: {store.path}\nCtrl+C encerra o servidor.", flush=True)
     if not args.no_browser:
-        open_window(url, args.desktop)
+        try:
+            open_window(url, args.desktop)
+        except (OSError, webbrowser.Error):
+            print(f'Não foi possível abrir o navegador automaticamente. Abra {url} no seu navegador.', file=sys.stderr)
     try:
+        mark_started()
+        server.updates.start()
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nTrama encerrado.")
@@ -641,4 +700,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    if os.environ.get('TRAMA_LAUNCHED') == '1':
+        sys.exit(main())
+    from launch_trama import launch as launch_main
+    sys.exit(launch_main())

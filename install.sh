@@ -5,19 +5,13 @@ SOURCE_DIR="$(cd -- "$(dirname -- "$INSTALLER_PATH")" && pwd -P)"
 DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
 APP_DIR="$DATA_ROOT/trama/app"
 BIN_DIR="$HOME/.local/bin"
-mkdir -p "$APP_DIR/web" "$DATA_ROOT/applications" "$BIN_DIR"
-if [[ "$(cd -- "$APP_DIR" && pwd -P)" != "$SOURCE_DIR" ]]; then
-  cp -- "$SOURCE_DIR/server.py" "$SOURCE_DIR/proofreader.py" "$SOURCE_DIR/storage_features.py" "$SOURCE_DIR/sync_store.py" "$SOURCE_DIR/auto_sync.py" "$SOURCE_DIR/sync_preview.py" "$SOURCE_DIR/proton_service.py" "$SOURCE_DIR/start.sh" "$SOURCE_DIR/install.sh" "$APP_DIR/"
-  cp -R -- "$SOURCE_DIR/web/." "$APP_DIR/web/"
-  if [[ -d "$SOURCE_DIR/resources" ]]; then mkdir -p "$APP_DIR/resources"; cp -R -- "$SOURCE_DIR/resources/." "$APP_DIR/resources/"; fi
-  cp -- "$SOURCE_DIR/dictionary.py" "$SOURCE_DIR/build_dictionary.py" "$SOURCE_DIR/DICTIONARY.md" "$APP_DIR/"
-  for notice in README.md THIRD-PARTY-NOTICES.md; do
-    if [[ -f "$SOURCE_DIR/$notice" ]]; then cp -- "$SOURCE_DIR/$notice" "$APP_DIR/"; fi
-  done
-  for optional in proton-transfer.sh proton_transfer.py PROTON-DRIVE.md FEATURE-COVERAGE.md translation.py translation_worker.py setup_translation.py setup-translation.sh setup-translation.cmd TRANSLATION.md setup_proofreader.py setup-writing.sh setup-writing.cmd WRITING.md LEARNING.md; do
-    if [[ -f "$SOURCE_DIR/$optional" ]]; then cp -- "$SOURCE_DIR/$optional" "$APP_DIR/"; fi
-  done
+if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+  printf '%s\n' 'Python 3.10 ou mais recente não encontrado. No Arch Linux: sudo pacman -S python' >&2
+  exit 1
 fi
+# Stage the complete program before replacement; never copy user data/state.
+python3 "$SOURCE_DIR/install_windows.py" --copy-program "$SOURCE_DIR" "$APP_DIR"
+mkdir -p "$DATA_ROOT/applications" "$BIN_DIR"
 chmod +x "$APP_DIR/start.sh" "$APP_DIR/install.sh"
 # A symlink keeps paths with spaces safe and always runs the installed launcher.
 ln -sfn -- "$APP_DIR/start.sh" "$BIN_DIR/trama"

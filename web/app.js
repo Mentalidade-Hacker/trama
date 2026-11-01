@@ -11,6 +11,7 @@ import {setupDictionary} from './dictionary-ui.js';
 import {setupLearning} from './learning-ui.js';
 import {setupVocabulary} from './vocabulary-suggestions.js';
 import {setupBackup} from './backup-ui.js';
+import {setupUpdates} from './update-ui.js';
 import { maskMarkup, applySuggestion, isProtectedRange } from './proofread.js';
 
 const $ = s => document.querySelector(s);
@@ -425,8 +426,10 @@ featureContext.flushDrafts=async()=>{
   return translationSaved&&learningSaved;
 };
 featureContext.draftBackupState=()=>({archived:learningUI.drafts.archived.length});
+featureContext.updateClientId=liveSync.client;
 setupVocabulary(featureContext);
 setupBackup(featureContext);
+setupUpdates(featureContext);
 setupLiveWriting(featureContext);
 liveSync.start();
 init();

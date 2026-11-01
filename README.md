@@ -1,16 +1,16 @@
-# Trama 0.9.1
+# Trama 0.10
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.9 adicionou **rascunhos de aprendizagem salvos automaticamente**, amplia o dicionário inglês, sugere escolhas de vocabulário com revisão espaçada e inclui **backup completo com restauração guiada**. A correção **0.9.1** salva também a prática de tradução, preserva cartões em blocos hierárquicos, melhora a análise de textos longos e reforça a recuperação de backups. Mantém a sincronização automática opcional e a comparação de conflitos da 0.8. O tamanho das letras pode ser ajustado de 80% a 200%. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+As notas funcionam sem conta e sem internet depois de instalados os requisitos. A versão **0.10** acrescenta **download automático de atualizações**, aplicadas quando você encerra e abre o Trama novamente. A consulta de versões usa internet e pode ser desativada. Mantém os rascunhos recuperáveis de aprendizagem e tradução, o dicionário offline, as sugestões de vocabulário com revisão espaçada, o backup completo e a sincronização opcional entre computadores. O tamanho das letras pode ser ajustado de 80% a 200%, com temas claro e escuro. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
-Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Recomenda-se usar a **0.9.1 nos dois computadores** para obter as melhorias de conferência e comparação. O formato das cópias continua compatível com a 0.7.
+Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Use a **0.10 nos dois computadores** para receber o novo fluxo de atualização. A primeira passagem da 0.9.1 ou anterior para a 0.10 é manual; depois, cada instalação pode baixar as próximas versões automaticamente. O formato das cópias de sincronização continua compatível com a 0.7.
 
-- [Trama 0.9.1 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9.1/trama-v0.9.1-windows-linux.zip).
-- [Trama 0.9.1 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9.1/trama-v0.9.1-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.9.1](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9.1/trama-v0.9.1-SHA256.txt).
+- [Trama 0.10 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10/trama-v0.10-windows-linux.zip).
+- [Trama 0.10 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10/trama-v0.10-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.10](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10/trama-v0.10-SHA256.txt).
 
 Extraia o pacote. Com **Python 3.10 ou mais recente** e um navegador atual, abra `start.cmd` no Windows ou execute `bash start.sh` no Arch Linux. Os detalhes estão nas seções abaixo. Os pacotes contêm código-fonte e lançadores, não um executável independente do Python.
 
@@ -22,11 +22,19 @@ python build_dictionary.py --download-dir work/dictionary-source
 
 Esse comando baixa aproximadamente 572 MB de fontes abertas e reconstrói o dicionário local. Consulte [resources/README.md](resources/README.md) para os detalhes. Os avisos e licenças dos componentes incluídos estão em [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); eles não definem uma licença geral para o código próprio do Trama.
 
+## Receber atualizações
+
+Abra **Atualizações** na barra lateral. **Baixar atualizações automaticamente** vem ativado no pacote instalado: o Trama verifica versões estáveis do repositório oficial pouco depois de abrir e, enquanto estiver em execução, a cada seis horas. **Verificar atualização** faz uma consulta manual e pode baixar a nova versão mesmo com a opção automática desligada.
+
+Você pode continuar escrevendo durante o download. Quando aparecer **Atualização pronta para instalar**, use **Salvar e encerrar Trama**, aguarde a confirmação e abra novamente pelo mesmo atalho. O botão confirma as notas e os rascunhos desta janela; se houver conflito ou outra janela sinalizando edição, pede que você resolva antes de encerrar. **Fechar apenas a aba do navegador não encerra o servidor nem instala a atualização.** Se o botão de encerramento não estiver disponível, salve e use `Ctrl+C` no terminal antes de reabrir.
+
+Desativar a opção impede as próximas verificações automáticas; uma transferência já iniciada pode terminar e um pacote já pronto continua previsto para a próxima abertura. Sem internet, o aplicativo instalado continua disponível. A atualização inclui o programa e seus recursos; não instala Python, Java, LanguageTool, modelos de tradução ou Proton Drive CLI, nem baixa novamente o dicionário de significados. Os dados continuam separados do programa. Consulte [UPDATES.md](UPDATES.md) para a primeira atualização manual, recuperação e limites de segurança.
+
 ## Escolher a aparência
 
 Use o seletor **Tema** na barra superior, ou **Aparência** na barra lateral. O modo escuro é opcional: sem uma preferência anterior, o Trama abre no modo claro. **Seguir o sistema** acompanha as mudanças de tema do computador; **Claro** e **Escuro** mantêm sua escolha independentemente do sistema.
 
-O tema escuro usa fundo carvão, texto claro suave, links azuis e cores próprias para alertas, tabelas, grafo, dicionário e exercícios. Imagens e anexos preservam suas cores. A preferência é aplicada ao abrir o aplicativo e fica salva neste navegador; ela não faz parte dos backups ou das cópias de sincronização das notas.
+O tema escuro usa fundo carvão, texto claro suave, links azuis e cores próprias para alertas, tabelas, grafo, dicionário e exercícios. Imagens e anexos preservam suas cores. A preferência é aplicada ao abrir o aplicativo e fica salva neste navegador. Pode ser incluída no **Backup completo**, mas não acompanha as cópias de sincronização das notas.
 
 Para aumentar ou diminuir as letras, clique em **Aa** na barra superior ou em **Aparência → Tamanho do texto**. Use **A−**, **A+** ou o controle deslizante entre **80% e 200%**. Notas, menus, dicionário e exercícios mudam imediatamente. **Restaurar padrão** volta a 100%. O tamanho fica salvo neste navegador e pode ser diferente em cada computador, sem alterar suas notas.
 
@@ -47,7 +55,9 @@ Para adicionar **Trama** ao menu de aplicativos, execute sem `sudo`:
 bash install.sh
 ```
 
-O instalador copia o programa para `${XDG_DATA_HOME:-~/.local/share}/trama/app`, cria `~/.local/bin/trama` e preserva o banco existente. Para atualizar, encerre o servidor anterior e execute o instalador da nova pasta extraída. O atalho usa `--desktop`: Chromium/Chrome abre uma janela de aplicativo; se indisponível, usa o navegador padrão.
+O instalador copia o programa para `${XDG_DATA_HOME:-~/.local/share}/trama/app`, cria `~/.local/bin/trama` e preserva o banco existente. Na 0.10, ele inclui todos os módulos Python, inclusive os de rascunhos e backup que faltavam na lista antiga. A cópia nova é preparada antes da substituição, com recuperação da anterior se a troca falhar. Se encontrar arquivos pessoais inesperados dentro da pasta do programa, recusa a substituição e explica como preservá-los. O atalho usa `--desktop`: Chromium/Chrome abre uma janela de aplicativo; se indisponível, usa o navegador padrão.
+
+Para atualizar manualmente, encerre o servidor anterior e execute o instalador da nova pasta extraída. Para versões futuras, você também pode usar o painel **Atualizações**.
 
 ```bash
 bash start.sh --desktop
@@ -68,7 +78,7 @@ python server.py --desktop
 python server.py --data-dir "D:\Notas\Trama"
 ```
 
-Fechar a janela do navegador não encerra o servidor. Use `Ctrl+C` no terminal ou encerre o processo Python do Trama no monitor de sistema/Gerenciador de Tarefas. Se já está aberto, volte ao endereço local em vez de iniciar outra cópia.
+Fechar a janela do navegador não encerra o servidor. Use `Ctrl+C` no terminal; quando houver uma atualização pronta, o painel **Atualizações** oferece **Salvar e encerrar Trama**. Se já está aberto, volte ao endereço local em vez de iniciar outra cópia.
 
 O pacote contém código-fonte e lançadores; não é um AppImage ou binário independente do Python. O corretor gramatical é opcional e requer LanguageTool/Java.
 
@@ -259,6 +269,8 @@ O servidor escuta apenas em `127.0.0.1`. Limites: 32 MB por gravação, 50 mil p
 
 Os testes automatizados de modelo, consultas, componentes, corretor, armazenamento, ZIP, conflitos e sincronização rodam no ambiente de desenvolvimento Windows. O lançador Windows iniciou o servidor real. No navegador foram exercitados Datalog, fórmula, tabela, Kanban e publicação de snapshot em pasta isolada. A ortografia Hunspell real, a gramática LanguageTool real em PT/EN e o dicionário offline foram verificados, incluindo alertas e correções no navegador. A instalação no Arch, os instaladores no menu nativo e uma transferência real por conta Proton continuam exigindo validação nos respectivos ambientes. Nenhuma conta Proton foi acessada durante o desenvolvimento.
 
+Foi configurado um trabalho de CI que instala os requisitos e executa as suítes dentro de um contêiner Arch Linux. **Essa execução ainda não foi realizada nesta preparação da 0.10**; configurar o trabalho não comprova aprovação no Arch. Os testes do atualizador usam pacotes e respostas controladas para exercitar integridade, interrupção e recuperação. Isso não substitui acompanhar uma atualização real entre duas versões publicadas. Veja a separação entre verificações executadas e pendentes em [RELEASE-v0.10.md](RELEASE-v0.10.md).
+
 ```bash
 python -m unittest discover -s tests
 node --test tests/*.test.mjs
@@ -268,4 +280,4 @@ Node.js é usado apenas nos testes de desenvolvimento. A aplicação usa Python 
 
 Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A sincronização automática troca versões completas e pausa quando há divergências; não oferece a edição colaborativa simultânea do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).
 
-O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.9.1.md](TESTE-PROTON-0.9.1.md). O relatório da versão distingue testes executados e verificações pendentes: [RELEASE-v0.9.1.md](RELEASE-v0.9.1.md).
+O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.9.1.md](TESTE-PROTON-0.9.1.md). O relatório anterior permanece disponível em [RELEASE-v0.9.1.md](RELEASE-v0.9.1.md); as mudanças atuais estão em [RELEASE-v0.10.md](RELEASE-v0.10.md).

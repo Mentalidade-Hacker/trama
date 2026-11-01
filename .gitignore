@@ -22,6 +22,7 @@
 
 # The generated dictionary is shipped as a release asset, not committed.
 /resources/dictionary.sqlite
+/app-release.json
 
 # Local credentials and private configuration.
 .env
