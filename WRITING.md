@@ -37,7 +37,7 @@ O LanguageTool só recebe texto pela conexão local do computador. Não há cont
 
 ## Dicionário de significados
 
-Clique em **Dicionário**, ou selecione uma palavra no editor e pressione **Alt + Shift + D**. A consulta usa a base incluída: português e inglês simplificado, com classe gramatical e exemplos quando constam na fonte. **Guardar significado** cria um bloco no vocabulário, com a atribuição e o link da fonte; esse conteúdo acompanha os backups do grafo.
+Clique em **Dicionário**, ou selecione uma palavra no editor e pressione **Alt + Shift + D**. A consulta usa a base incluída: português e a edição completa English Wiktionary (inglês), com classe gramatical e exemplos quando constam na fonte. **Guardar significado** cria um bloco no vocabulário, com a atribuição e o link da fonte; esse conteúdo acompanha os backups do grafo.
 
 Veja [DICTIONARY.md](DICTIONARY.md) para cobertura e licença. As regras ortográficas Hunspell têm suas fontes e licenças em `web/vendor/spelling/SOURCE.md`. Ortografia, definições e tradução são recursos diferentes: uma palavra reconhecida pelo corretor pode não ter verbete na base de significados.
 

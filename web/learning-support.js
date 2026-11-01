@@ -37,7 +37,10 @@ export function correctionForStudy(text, match, language) {
   const sentenceEnd = trailing ? match.offset + match.length + trailing.index + 1 : text.length;
   let start = Math.max(sentenceStart, match.offset - 500);
   while (start < match.offset && /\s/u.test(text[start])) start++;
-  const end = Math.min(sentenceEnd, match.offset + match.length + 500);
+  let end = Math.min(sentenceEnd, match.offset + match.length + 500);
+  const splits = index => index > 0 && index < text.length && text.charCodeAt(index - 1) >= 0xD800 && text.charCodeAt(index - 1) <= 0xDBFF && text.charCodeAt(index) >= 0xDC00 && text.charCodeAt(index) <= 0xDFFF;
+  if (splits(start)) start--;
+  if (splits(end)) end++;
   const spelling = match.rule?.issueType === 'misspelling';
   return {
     language: language.startsWith('en') ? 'en' : 'pt',

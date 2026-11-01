@@ -1,4 +1,4 @@
-# Cobertura funcional — Trama 0.8
+# Cobertura funcional — Trama 0.9
 
 Este documento descreve os arquivos entregues. **Completo no escopo** indica que o fluxo local descrito está implementado, sem afirmar equivalência integral com o Roam. **Parcial** lista diferenças. **Ausente** significa não incluído. Não há porcentagem de paridade.
 
@@ -61,7 +61,7 @@ Os componentes e consultas usam blocos reais do grafo local. A tabela descreve o
 | Proton Drive | Parcial | Pasta sincronizada pelo cliente Proton ou transporte automático pela CLI oficial no Windows/Linux, após configuração e login inicial. Sem senha Proton dentro do Trama. A transferência depende da conexão e do serviço; nenhuma transferência real com conta foi executada neste ambiente. |
 | Ortografia ao digitar | Completo no escopo | Hunspell local com quatro variantes incluídas, sublinhados, sugestões por clique e termos aceitos. Campos de notas, tabelas, colunas Kanban e prática. Limite de 20 mil unidades UTF-16 por campo. |
 | Gramática ao digitar PT/EN | Parcial | LanguageTool local opcional, análise após pausa, sugestões individuais e proteção de sintaxe. Motor real testado em PT/EN no Windows; sem regras Premium/IA. |
-| Dicionário de significados | Parcial | Base offline incluída: 401.459 entradas PT e 61.743 Simple English, com classes/exemplos/fontes. Não equivale à cobertura integral do Wiktionary em inglês. |
+| Dicionário de significados | Parcial | Base offline incluída: 401.459 entradas PT e 1.497.827 entradas da edição English Wiktionary, com classes/fontes e exemplos presentes na origem. Uma fonte maior não garante todos os termos nem exemplos em cada verbete. |
 | Tradução local PT/EN | Parcial | Botões por página, leitura lado a lado, todos os blocos da página, cópia independente e motor offline CTranslate2 com modelos Argos. Modelos exigem instalação inicial. Rótulos de links simples usam aliases traduzidos com destinos preservados. Código, fórmulas, comandos, anexos e conteúdo externo não são traduzidos. |
 | Prática com tradução | Completo no escopo | Tentativa antes de revelar a tradução, revisão opcional com LanguageTool, frases/expressões salvas como blocos no grafo. Sem pontuação automática de qualidade ou avaliação de fidelidade. |
 | Aprender a escrever | Completo no escopo | 60 lições de vocabulário em 30 pares PT/EN, duas frases traduzidas por lição, alternativas contextualizadas, exercícios e 12 lições de escrita. Conjunto inicial finito; não é um curso completo ou professor conversacional. |
@@ -89,3 +89,9 @@ Arch Linux, instaladores nativos, transferência real com conta Proton não fora
 ## Melhorias da sincronização na 0.8
 
 Comparação somente de leitura com contagens e amostras, confirmação vinculada à versão comparada, tentativas com espera progressiva, nome do computador, horários de eventos separados, detecção de servidor indisponível e proteção durante composição de texto. O transporte Proton verifica conteúdo remoto antes de ignorar arquivos existentes e confirma uploads. Modo manual não realiza rede ao verificar a pasta. Testes com conta Proton real permanecem pendentes.
+
+## Aprendizagem e recuperação na 0.9
+
+- Rascunhos de Aprender a escrever: gravação no navegador e SQLite, recuperação ao reabrir, versões separadas em conflito e inclusão no novo backup completo. São locais; práticas explicitamente guardadas e cartões continuam no grafo sincronizado.
+- Explorar palavras: repetições e alternativas opcionais de 40 famílias autorais PT/EN. Aceitar uma ocorrência guarda o cartão para revisão. Não é análise semântica nem avaliação automática da qualidade da escrita.
+- Backup completo: notas, anexos, histórico disponível, rascunhos e preferências permitidas, com inspeção, confirmação e cópia prévia. Limites explícitos e sincronização desligada após restaurar.

@@ -9,6 +9,10 @@
 /userdata/
 /attachments/
 /backups/
+/full-backups/
+/.full-backup-restore.json
+/.full-backup-old-config-*.json
+/.full-backup-rollback-*.json
 /sync/
 /sync-config.json
 /sync-recovery/

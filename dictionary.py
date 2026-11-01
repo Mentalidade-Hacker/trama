@@ -17,16 +17,23 @@ LICENSE_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
 SOURCES = {
     "pt": {"name": "Wikcionário em português", "base": "https://pt.wiktionary.org/wiki/",
            "via": "https://kaikki.org/ptwiktionary/", "download": "https://kaikki.org/ptwiktionary/raw-wiktextract-data.jsonl.gz",
+           "filename": "pt-wiktextract.jsonl.gz",
            "description": "Definições em português extraídas do Wikcionário por Wiktextract/Kaikki."},
-    "en": {"name": "Simple English Wiktionary", "base": "https://simple.wiktionary.org/wiki/",
-           "via": "https://kaikki.org/simplewiktionary/", "download": "https://kaikki.org/simplewiktionary/raw-wiktextract-data.jsonl.gz",
-           "description": "Definições em inglês simplificado; a cobertura é menor que a edição completa em inglês."},
+    "en": {"name": "English Wiktionary", "base": "https://en.wiktionary.org/wiki/",
+           "via": "https://kaikki.org/dictionary/English/", "download": "https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz",
+           "filename": "enwiktionary-english.jsonl.gz",
+           "description": "Definições da edição completa do Wiktionary em inglês, filtradas para palavras e expressões do idioma inglês."},
 }
+LEGACY_EN_SOURCE = {"name": "Simple English Wiktionary", "base": "https://simple.wiktionary.org/wiki/",
+                    "via": "https://kaikki.org/simplewiktionary/",
+                    "description": "Esta base antiga usa o Simple English Wiktionary. O pacote completo atual inclui uma base inglesa ampliada."}
 PARTS = {"noun": "Substantivo", "verb": "Verbo", "adj": "Adjetivo", "adv": "Advérbio",
          "name": "Nome próprio", "pron": "Pronome", "prep": "Preposição", "conj": "Conjunção",
          "intj": "Interjeição", "det": "Determinante", "article": "Artigo", "num": "Numeral",
          "phrase": "Expressão", "proverb": "Provérbio", "prefix": "Prefixo", "suffix": "Sufixo",
-         "abbrev": "Abreviação", "symbol": "Símbolo", "particle": "Partícula", "character": "Caractere"}
+         "abbrev": "Abreviação", "symbol": "Símbolo", "particle": "Partícula", "character": "Caractere",
+         "contraction": "Contração", "prep_phrase": "Locução prepositiva", "postp": "Posposição",
+         "circumfix": "Circunfixo", "infix": "Infixo", "interfix": "Interfixo", "punct": "Pontuação"}
 MAX_LOOKUP = 160
 MAX_MATCHES = 80
 MAX_PAYLOAD = 2 * 1024 * 1024
@@ -52,8 +59,11 @@ def validate_lookup(word, language):
     return unicodedata.normalize("NFC", " ".join(word.split())), language
 
 
-def source_for(language, word=None):
+def source_for(language, word=None, metadata=None):
     source = SOURCES[language]
+    previous = metadata.get('sources', {}).get(language, {}) if isinstance(metadata, dict) and isinstance(metadata.get('sources'), dict) else {}
+    if language == 'en' and isinstance(previous, dict) and ('simplewiktionary' in str(previous.get('url', '')) or previous.get('name') == LEGACY_EN_SOURCE['name']):
+        source = LEGACY_EN_SOURCE
     url = source["base"] + quote(word.replace(" ", "_"), safe="") if word else source["base"]
     return {"name": source["name"], "url": url, "license": LICENSE, "licenseUrl": LICENSE_URL,
             "via": source["via"], "attribution": "Colaboradores do Wikcionário/Wiktionary; extração Wiktextract/Kaikki.org.",
@@ -106,8 +116,8 @@ class DictionaryService:
             languages = [language for language in LANGUAGES if metadata.get("counts", {}).get(language, 0)]
             return {"available": len(languages) == 2, "local": True, "languages": languages,
                     "counts": metadata.get("counts", {}), "builtAt": metadata.get("builtAt"),
-                    "sources": [source_for(language) for language in languages],
-                    "message": "Dicionário local: português e inglês simplificado. As consultas ficam neste computador."}
+                    "sources": [source_for(language, metadata=metadata) for language in languages],
+                    "message": "Dicionário local: português e inglês. As consultas ficam neste computador."}
         except (DictionaryError, sqlite3.Error, OSError, ValueError) as error:
             return {"available": False, "local": True, "languages": [], "sources": [],
                     "message": str(error) if isinstance(error, DictionaryError) else "Não foi possível abrir o dicionário local. Confira os arquivos do aplicativo."}
@@ -116,16 +126,17 @@ class DictionaryService:
         word, language = validate_lookup(word, language)
         try:
             with closing(self._connect()) as connection:
-                self._metadata(connection)
+                metadata = self._metadata(connection)
                 rows = connection.execute("SELECT word, pos, senses FROM entries WHERE language=? AND lookup=? ORDER BY CASE WHEN word=? THEN 0 ELSE 1 END, id LIMIT ?",
                                           (language, normalize_word(word), word, MAX_MATCHES + 1)).fetchall()
             entries = []
             for headword, pos, payload in rows[:MAX_MATCHES]:
                 definitions = decode_senses(payload)
                 entries.append({"word": headword, "partOfSpeech": pos, "definitions": definitions,
-                                "source": source_for(language, headword)})
+                                "source": source_for(language, headword, metadata)})
             found = bool(entries)
-            notice = "Definições em inglês simplificado." if language == "en" else "Definições em português."
+            notice = ("Definições em inglês simplificado, de uma base anterior do Trama." if source_for(language, metadata=metadata)['name'] == LEGACY_EN_SOURCE['name']
+                      else "Definições do Wiktionary em inglês.") if language == "en" else "Definições em português."
             if not found:
                 notice = "Esta palavra não foi encontrada na base local. Tente a forma básica ou confira a grafia."
             return {"word": word, "language": language, "found": found, "local": True,

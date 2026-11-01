@@ -1,4 +1,5 @@
 import * as C from './core.js';
+import {browserDraftStore} from './learning-drafts.js';
 import {WORD_LESSONS, WRITING_LESSONS} from './learning-content.js';
 import {partOfSpeechHelp} from './learning-support.js';
 import {LEARNING_PAGE, validateLesson, readLearning, readPracticeAttempt, learningStats, dueReviews, nextLesson,
@@ -16,21 +17,27 @@ export function setupLearning(ctx) {
   const dialog = document.createElement('dialog');
   dialog.id = 'learning-dialog'; dialog.setAttribute('aria-label', 'Aprender a escrever');
   document.body.append(dialog);
-  const writer = createLearningWriter(ctx), drafts = new Map(), savedDrafts = new Map();
+  const writer = createLearningWriter(ctx), savedDrafts = new Map(), draftContexts = new Map();
+  const drafts = browserDraftStore(() => { const label=dialog.querySelector('[data-draft-status]'); if(label)label.textContent=drafts.status().message; });
   let state = {language:'pt', tab:'words', lesson:null, expanded:false, choice:null, feedback:null, revealed:false};
   let sequence = 0, controller = null, notice = '', error = '', loading = false, pendingAction = null;
   const $ = selector => dialog.querySelector(selector);
   const draftKey = () => state.lesson ? (state.tab==='review'?'review:':'')+state.lesson.id : '';
-  const currentDraft = () => drafts.get(draftKey()) || '';
+  const currentDraft = () => drafts.current(draftKey())?.data.text || '';
 
   function stop() { sequence++; controller?.abort(); controller = null; }
-  function captureDraft() { const field = $('[data-learning-writing]'); if (field?.dataset.learningLesson) drafts.set(field.dataset.learningLesson, field.value); }
-  dialog.addEventListener('close', () => { captureDraft(); stop(); });
+  function captureDraft() {
+    const field = $('[data-learning-writing]'), context = draftContexts.get(field?.dataset.learningLesson);
+    if (field && context) drafts.set({...context,text:field.value});
+  }
+  dialog.addEventListener('close', () => { captureDraft(); void drafts.flush(); stop(); });
+  window.addEventListener('pagehide', () => { captureDraft(); void drafts.flush(); });
+  document.addEventListener('visibilitychange', () => { if(document.hidden){captureDraft();void drafts.flush();} });
   dialog.addEventListener('keydown', event => event.stopPropagation());
   dialog.addEventListener('click', event => event.stopPropagation());
   dialog.addEventListener('input', event => {
     if (event.target.matches('[data-learning-writing]') && event.target.dataset.learningLesson) {
-      drafts.set(event.target.dataset.learningLesson, event.target.value);
+      captureDraft();
       const button = $('[data-learn-save]');
       if (button) { const saved = savedDrafts.get(event.target.dataset.learningLesson) === event.target.value.trim(); button.disabled = writer.busy || !!writer.pending || saved; button.textContent = saved ? 'Esta versão já está guardada' : 'Guardar minha prática'; }
     }
@@ -45,7 +52,7 @@ export function setupLearning(ctx) {
   function choose(lesson) {
     captureDraft();
     state.lesson = lesson ? validateLesson(lesson) : null;
-    state.expanded = false; state.choice = null; state.feedback = null; state.revealed = false;
+    state.expanded = false; state.choice = null; state.feedback = null; state.revealed = false; state.restored=false;
   }
 
   function selectTab(tab) {
@@ -59,6 +66,7 @@ export function setupLearning(ctx) {
     const stats = writer.pending ? null : learningStats(ctx.data, state.language);
     return `<header class="learn-head"><div><p class="learn-eyebrow">UM POUCO DE PRÁTICA, TODOS OS DIAS</p><h2>Aprender a escrever</h2><p>Entenda uma escolha. Experimente na sua frase. Volte para lembrar.</p></div><button type="button" data-learn-close aria-label="Fechar aprendizagem">✕</button></header>
       <div class="learn-toolbar"><label>Quero praticar<select data-learn-language aria-label="Idioma da prática" ${writer.busy||writer.pending?'disabled':''}><option value="pt" ${state.language==='pt'?'selected':''}>Português</option><option value="en" ${state.language==='en'?'selected':''}>English</option></select></label><button class="secondary" data-learn-records>Meus registros ↗</button></div>
+      <div class="learn-toolbar"><label>Retomar um rascunho<select data-draft-select aria-label="Retomar um rascunho"><option value="">Escolha uma atividade salva</option>${drafts.list().filter(row=>row.data.text).map(row=>`<option value="${esc(row.id)}">${esc(row.data.lesson.word||row.data.lesson.title)} · ${labels[row.data.language]} · ${esc(dateLabel(row.updated))}${row.dirty?' · pendente':''}</option>`).join('')}${drafts.archived.map((row,index)=>`<option value="archive:${index}">Cópia anterior: ${esc(row.data.lesson.word||row.data.lesson.title)}</option>`).join('')}</select></label><button class="secondary" data-draft-retry>Salvar rascunhos agora</button></div>
       <div class="learn-stats" aria-label="Seu progresso"><div><strong>${stats?.seen ?? '—'}</strong><span>atividades exploradas</span></div><div><strong>${stats?.practiced ?? '—'}</strong><span>com uma frase sua</span></div><div><strong>${stats?.due ?? '—'}</strong><span>para revisar agora</span></div></div>
       <nav class="learn-tabs" role="tablist" aria-label="Atividades de aprendizagem">${[['words','Novas palavras'],['writing','Melhorar escrita'],['review','Revisar']].map(([id,label])=>`<button id="learn-tab-${id}" role="tab" aria-selected="${state.tab===id}" aria-controls="learn-content" data-learn-tab="${id}" ${writer.busy||writer.pending?'disabled':''}>${label}</button>`).join('')}</nav>`;
   }
@@ -80,9 +88,10 @@ export function setupLearning(ctx) {
   }
 
   function practice(lesson, review=false) {
+    draftContexts.set(draftKey(),{key:draftKey(),lesson,tab:state.tab});
     const count = readLearning(ctx.data).cards.get(lesson.id)?.state.attempts || 0;
     const saved = savedDrafts.get(draftKey()) === currentDraft().trim();
-    return `<section class="learn-practice"><span class="learn-step">${review?'PRATIQUE DE MEMÓRIA':lesson.quiz?'2 · USE DO SEU JEITO':'AGORA É COM VOCÊ'}</span><h3>Uma frase que seja sua</h3><p id="learn-writing-prompt">${esc(lesson.prompt)}</p><label class="learn-writing-label" for="learn-own-sentence">Meu texto em ${labels[lesson.language]}</label><textarea id="learn-own-sentence" rows="4" maxlength="12000" data-learning-writing data-learning-lesson="${esc(draftKey())}" data-writing-language="${lesson.language==='pt'?'pt-BR':'en-US'}" lang="${lesson.language==='pt'?'pt-BR':'en-US'}" spellcheck="true" aria-describedby="learn-writing-prompt" placeholder="Pense em uma situação real e escreva uma frase…">${esc(currentDraft())}</textarea><div class="learn-practice-actions"><button class="primary" data-learn-save ${writer.busy||writer.pending||saved?'disabled':''}>${saved?'Esta versão já está guardada':'Guardar minha prática'}</button><span>${count&&!writer.pending?`${count} ${count===1?'texto guardado':'textos guardados'} nesta atividade`:'Seu texto fica no seu grafo'}</span></div><p class="learn-footnote">As sugestões locais ajudam com a forma. O sentido, o estilo e a adequação da sua frase continuam sendo escolhas suas. Rascunhos ficam disponíveis ao trocar de atividade nesta janela.</p></section>`;
+    return `<section class="learn-practice"><span class="learn-step">${review?'PRATIQUE DE MEMÓRIA':lesson.quiz?'2 · USE DO SEU JEITO':'AGORA É COM VOCÊ'}</span><h3>Uma frase que seja sua</h3><p id="learn-writing-prompt">${esc(lesson.prompt)}</p><label class="learn-writing-label" for="learn-own-sentence">Meu texto em ${labels[lesson.language]}</label><textarea id="learn-own-sentence" rows="4" maxlength="12000" data-learning-writing data-learning-lesson="${esc(draftKey())}" data-writing-language="${lesson.language==='pt'?'pt-BR':'en-US'}" lang="${lesson.language==='pt'?'pt-BR':'en-US'}" spellcheck="true" aria-describedby="learn-writing-prompt" placeholder="Pense em uma situação real e escreva uma frase…">${esc(currentDraft())}</textarea><p class="learn-footnote" data-draft-status role="status">${esc(drafts.status().message)}</p><div class="learn-practice-actions"><button class="primary" data-learn-save ${writer.busy||writer.pending||saved?'disabled':''}>${saved?'Esta versão já está guardada':'Guardar minha prática'}</button><span>${count&&!writer.pending?`${count} ${count===1?'texto guardado':'textos guardados'} nesta atividade`:'Seu texto fica no seu grafo'}</span></div><p class="learn-footnote">O rascunho é salvo automaticamente neste computador e pode ser retomado ao reabrir. “Guardar minha prática” registra uma versão no grafo e agenda sua revisão. As sugestões ajudam com a forma; o sentido e a adequação continuam sendo escolhas suas.</p></section>`;
   }
 
   function lessonContent() {
@@ -103,6 +112,7 @@ export function setupLearning(ctx) {
   function reviewContent() {
     const reviews = dueReviews(ctx.data, state.language);
     let card = reviews.find(item => item.state.lesson.id === state.lesson?.id);
+    if (!card && state.restored && state.lesson) return lessonContent();
     if (!card && reviews.length) { card = reviews[0]; choose(card.state.lesson); }
     if (!card) {
       const upcoming = [...readLearning(ctx.data).cards.values()].filter(item=>item.state.lesson.language===state.language&&item.state.dueAt).sort((a,b)=>a.state.dueAt.localeCompare(b.state.dueAt))[0];
@@ -119,6 +129,8 @@ export function setupLearning(ctx) {
     captureDraft();
     dialog.innerHTML = header()+`<div class="learn-notices" aria-live="polite">${error?`<p class="learn-error">${esc(error)}</p>`:''}${notice?`<p class="learn-success">${esc(notice)}</p>`:''}${writer.busy?'<p class="learn-saving">Salvando no seu grafo…</p>':''}${writer.pending&&!writer.busy?'<div class="learn-pending"><p>Há um registro aguardando confirmação no disco. Seus rascunhos continuam aqui.</p><button class="secondary" data-learn-retry>Tentar salvar o mesmo registro novamente</button></div>':''}</div><main id="learn-content" class="learn-body" role="tabpanel" aria-labelledby="learn-tab-${state.tab}">${state.tab==='review'?reviewContent():lessonContent()}</main>`;
     $('[data-learn-close]').onclick = () => dialog.close();
+    $('[data-draft-select]').onchange = event => { if(!canNavigate())return;captureDraft();const value=event.target.value;const row=value.startsWith('archive:')?drafts.recoverArchived(Number(value.slice(8))):drafts.list().find(item=>item.id===value);if(row)restoreDraft(row); };
+    $('[data-draft-retry]').onclick = async () => { captureDraft();const ok=await drafts.flush();if(dialog.open){notice=ok?'Rascunhos salvos no computador.':'';error=ok?'':drafts.status().message;render();} };
     $('[data-learn-language]').onchange = event => { const language = event.target.value; if (!canNavigate()) return; state.language = language; selectTab(state.tab); };
     $('[data-learn-records]').onclick = () => { const page = C.findPage(ctx.data, LEARNING_PAGE); if (page) { dialog.close(); ctx.openPage(page.title); } else ctx.toast('Guarde sua primeira prática para criar os registros no grafo.'); };
     dialog.querySelectorAll('[data-learn-tab]').forEach(button=>button.onclick=()=>selectTab(button.dataset.learnTab));
@@ -212,9 +224,22 @@ export function setupLearning(ctx) {
     }
   }
 
-  function open(detail={}) {
+  function restoreDraft(row) {
+    captureDraft(); $('[data-learning-writing]')?.remove();
+    drafts.select(row.id); state.language=row.data.language;state.tab=row.data.tab;
+    choose(row.data.lesson);state.restored=true;notice='Rascunho recuperado. Continue de onde parou.';loading=false;render();
+  }
+
+  async function open(detail={}) {
     if (writer.busy) { ctx.toast('Aguarde a confirmação do salvamento da prática.'); return; }
     captureDraft(); stop(); ctx.finishEditing(); notice = ''; error = ''; loading = false;
+    const opening=sequence;
+    await drafts.ready;
+    if(opening!==sequence)return;
+    const latest = drafts.list().find(row=>row.data.text);
+    if (!detail.word && !detail.correction && latest) {
+      restoreDraft(latest);if(!dialog.open)dialog.showModal();dialog.scrollTop=0;return;
+    }
     const language = detail.language === 'en' || (!detail.language && ctx.language?.().startsWith('en')) ? 'en' : 'pt';
     state.language = language;
     const word = typeof detail.word === 'string' ? detail.word.trim().slice(0,160) : '';
@@ -238,5 +263,5 @@ export function setupLearning(ctx) {
 
   document.addEventListener('click', event => { if (event.target.closest('[data-learning-open]')) { event.preventDefault(); open(); } });
   document.addEventListener('trama:learn', event => open(event.detail || {}));
-  return {open, close:()=>dialog.close(), dialog};
+  return {open, close:()=>dialog.close(), dialog, flushDrafts:async()=>{captureDraft();return drafts.flush();}};
 }

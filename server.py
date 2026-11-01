@@ -26,6 +26,8 @@ from sync_preview import preview_snapshot
 from proton_service import ProtonService
 from translation import TranslationService, TranslationError
 from dictionary import DictionaryService, DictionaryError
+from learning_drafts import LearningDrafts, DraftConflict, setup_drafts
+from full_backup import FullBackup, FullBackupError, MAX_FULL_BACKUP_REQUEST
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 32 * 1024 * 1024
@@ -112,10 +114,13 @@ class Store:
             db.execute("CREATE TABLE IF NOT EXISTS graph (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, data TEXT NOT NULL)")
             db.execute("INSERT OR IGNORE INTO graph VALUES(1, 0, ?)", (json.dumps(EMPTY),))
             setup_storage(db)
+            setup_drafts(db)
         if os.name != "nt":
             self.path.chmod(0o600)
         self.features = StorageFeatures(self)
         self.sync = SyncStore(self)
+        self.drafts = LearningDrafts(self)
+        self.full_backup = FullBackup(self)
 
     @contextmanager
     def connect(self):
@@ -181,7 +186,7 @@ class Store:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Trama/0.8"
+    server_version = "Trama/0.9"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):
@@ -248,6 +253,26 @@ class Handler(SimpleHTTPRequestHandler):
         if not self.allowed():
             return
         path = urlsplit(self.path).path
+        if path.startswith('/api/full-backup/recovery/'):
+            try:
+                body = self.server.store.full_backup.recovery(path.removeprefix('/api/full-backup/recovery/'))
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/zip')
+                self.send_header('Content-Disposition', 'attachment; filename="trama-recuperacao.zip"')
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except FullBackupError as exc:
+                self.json_response(exc.status, {'error': str(exc), 'code': exc.code})
+            except (ValueError, OSError, sqlite3.Error):
+                self.json_response(400, {'error': 'Não foi possível abrir a cópia de recuperação.'})
+            return
+        if path == "/api/learning/drafts":
+            try:
+                self.json_response(200, self.server.store.drafts.read())
+            except (OSError, sqlite3.Error):
+                self.json_response(503, {"error": "Não foi possível ler os rascunhos no disco."})
+            return
         if path == "/api/revision":
             self.json_response(200, {"revision": self.server.store.revision()})
             return
@@ -398,6 +423,43 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path = urlsplit(self.path).path
+        if path in ('/api/full-backup/export', '/api/full-backup/inspect', '/api/full-backup/restore'):
+            if not self.allowed():
+                return
+            try:
+                payload = self.read_json(MAX_FULL_BACKUP_REQUEST if path != '/api/full-backup/export' else MAX_BODY)
+                service = self.server.store.full_backup
+                if path == '/api/full-backup/export':
+                    body = service.export(payload)
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/zip')
+                    self.send_header('Content-Disposition', 'attachment; filename="trama-backup-completo.zip"')
+                    self.send_header('Content-Length', str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.json_response(200, (service.inspect if path.endswith('/inspect') else service.restore)(payload))
+            except FullBackupError as exc:
+                self.json_response(exc.status, {'error': str(exc), 'code': exc.code})
+            except Conflict as exc:
+                self.json_response(409, {'error': str(exc), 'code': 'backup_revision_conflict'})
+            except (ValueError, TypeError, RecursionError) as exc:
+                self.json_response(400, {'error': str(exc) or 'Backup inválido.'})
+            except (OSError, sqlite3.Error):
+                self.json_response(503, {'error': 'Não foi possível concluir o backup ou a restauração. Confira espaço livre e permissões.'})
+            return
+        if path == "/api/learning/drafts":
+            if not self.allowed():
+                return
+            try:
+                self.json_response(200, self.server.store.drafts.save(self.read_json(256 * 1024)))
+            except DraftConflict as exc:
+                self.json_response(409, {"error": str(exc), "code": exc.code})
+            except (ValueError, TypeError, RecursionError) as exc:
+                self.json_response(400, {"error": str(exc) or "Rascunho inválido."})
+            except (OSError, sqlite3.Error):
+                self.json_response(503, {"error": "Não foi possível gravar o rascunho no computador. A cópia do navegador continua disponível."})
+            return
         if path in ("/api/sync/activity", "/api/sync/proton/login"):
             if not self.allowed():
                 return

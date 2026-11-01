@@ -29,6 +29,15 @@ test('long study excerpts retain both sides of the correction without copying a 
   assert.ok(card.correction.before.length<1100);assert.match(card.correction.after,/ acerto /);
   assert.ok(card.correction.before.startsWith('…'));assert.ok(card.correction.after.endsWith('…'));
 });
+
+test('correction excerpts preserve complete emoji at both length boundaries',()=>{
+  for(const text of ['🙂'+'x'.repeat(498)+' erro','erro '+'x'.repeat(498)+'🙂 fim']){
+    const offset=text.indexOf('erro');
+    const card=correctionForStudy(text,{offset,length:4,replacements:[{value:'acerto'}]},'pt-BR');
+    assert.ok(card.correction.before.includes('🙂'));assert.ok(card.correction.after.includes('🙂'));
+    assert.ok(card.correction.before.isWellFormed());assert.ok(card.correction.after.isWellFormed());
+  }
+});
 test('invalid suggestions and protected links cannot become misleading corrections',()=>{
   assert.throws(()=>correctionForStudy('[[Página]]',{offset:2,length:6,replacements:[{value:'Outra'}]},'pt-BR'),/protegido/);
   assert.throws(()=>correctionForStudy('texto',{offset:99,length:2,replacements:[{value:'outro'}]},'pt-BR'),/inválida/);

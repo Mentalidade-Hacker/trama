@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import uuid
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -55,6 +56,20 @@ class StorageFeaturesTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.upload(b"four")
         self.assertEqual(self.features.list(), [])
+
+    def test_exclusive_attachment_collision_preserves_existing_bytes(self):
+        ident = uuid.uuid4()
+        path = self.features.folder / ident.hex
+        original = b"Original immutable attachment, never delete on collision."
+        path.write_bytes(original)
+        before = self.store.read()
+        with patch("storage_features.uuid.uuid4", return_value=ident):
+            with self.assertRaises(FileExistsError):
+                self.features._write(b"replacement")
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(list(self.features.folder.iterdir()), [path])
+        self.assertEqual(self.features.list(), [])
+        self.assertEqual(self.store.read(), before)
 
     def test_history_survives_restart_and_conflict_does_not_add_revision(self):
         self.store.save(0, graph("first"))

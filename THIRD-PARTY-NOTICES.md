@@ -24,12 +24,12 @@ Os binários do Hunspell e suas fontes correspondem ao commit upstream `8f755ef6
 
 ## Dicionário de significados incluído nos pacotes de versão
 
-O arquivo `resources/dictionary.sqlite` é gerado e distribuído nos pacotes completos das versões, não no histórico Git. Suas definições vêm dos colaboradores do **Wikcionário em português** e do **Simple English Wiktionary**, extraídas pelo projeto **Wiktextract** e disponibilizadas por **Kaikki.org**, mantido por Tatu Ylonen.
+O arquivo `resources/dictionary.sqlite` é gerado e distribuído nos pacotes completos das versões, não no histórico Git. Suas definições vêm dos colaboradores do **Wikcionário em português** e do **English Wiktionary**, extraídas pelo projeto **Wiktextract** e disponibilizadas por **Kaikki.org**, mantido por Tatu Ylonen.
 
 Os textos são disponibilizados sob [Creative Commons Atribuição-CompartilhaIgual 4.0 Internacional](https://creativecommons.org/licenses/by-sa/4.0/). O Trama filtra os idiomas e reorganiza os dados para consulta local; mantém as definições, os exemplos e as referências fornecidas. Cada verbete tem um link para a página de origem e seu histórico. Exemplos atribuídos a outras obras conservam a referência da fonte; materiais de terceiros podem ter condições próprias indicadas pelo Wiktionary.
 
 - [Dados do Wikcionário em português](https://kaikki.org/ptwiktionary/rawdata.html).
-- [Dados do Simple English Wiktionary](https://kaikki.org/simplewiktionary/rawdata.html).
+- [Dados do English Wiktionary filtrados para inglês](https://kaikki.org/dictionary/English/).
 - [Direitos autorais do Wikcionário](https://pt.wiktionary.org/wiki/Wikcion%C3%A1rio:Direitos_autorais) e [do Wiktionary](https://en.wiktionary.org/wiki/Wiktionary:Copyrights).
 - [Detalhes da distribuição, cobertura e reconstrução](DICTIONARY.md).
 

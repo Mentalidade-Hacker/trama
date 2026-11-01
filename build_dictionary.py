@@ -17,10 +17,10 @@ import zlib
 
 from dictionary import FORMAT, LANGUAGES, LICENSE, LICENSE_URL, PARTS, SOURCES, normalize_word
 
-MAX_DOWNLOAD = 256 * 1024 * 1024
+MAX_DOWNLOAD = 1024 * 1024 * 1024
 MAX_LINE = 16 * 1024 * 1024
-MAX_EXPANDED = 2 * 1024 * 1024 * 1024
-MAX_ROWS = 2_000_000
+MAX_EXPANDED = 6 * 1024 * 1024 * 1024
+MAX_ROWS = 3_000_000
 USER_AGENT = "Trama-Dictionary-Builder/1.0 (offline Wiktionary dictionary)"
 
 
@@ -35,7 +35,7 @@ def sha256(path):
 def download_source(language, folder):
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    destination = folder / f"{language}-wiktextract.jsonl.gz"
+    destination = folder / SOURCES[language]["filename"]
     if destination.is_file():
         print(f"Usando download existente: {destination}", flush=True)
         return destination
@@ -49,7 +49,7 @@ def download_source(language, folder):
             expected = source.headers.get("Content-Length")
             expected = int(expected) if expected and expected.isdigit() else None
             if expected and expected > MAX_DOWNLOAD:
-                raise ValueError("O dicionário excede o limite de download de 256 MiB.")
+                raise ValueError("O dicionário excede o limite de download de 1 GiB.")
             while True:
                 chunk = source.read(1024 * 1024)
                 if not chunk:
@@ -58,6 +58,8 @@ def download_source(language, folder):
                 if total > MAX_DOWNLOAD:
                     raise ValueError("O download excede o tamanho permitido.")
                 output.write(chunk)
+                if total % (32 * 1024 * 1024) == 0:
+                    print(f"  {language}: {total / 1024 / 1024:.0f} MiB baixados…", flush=True)
             output.flush()
             os.fsync(output.fileno())
         if expected is not None and total != expected:
@@ -102,6 +104,13 @@ def normalize_entry(entry, language):
                 examples.append(item)
         labels = [value for key in ("tags", "raw_tags") for value in (sense.get(key) if isinstance(sense.get(key), list) else []) if isinstance(value, str)]
         result = {"definition": definition, "examples": examples}
+        synonyms = []
+        for synonym in sense.get('synonyms', []) if isinstance(sense.get('synonyms'), list) else []:
+            value = synonym.get('word') if isinstance(synonym, dict) else None
+            if isinstance(value, str) and value.strip() and len(value) <= 160 and value.strip() not in synonyms:
+                synonyms.append(value.strip())
+        if synonyms:
+            result['synonyms'] = synonyms
         if labels:
             result["labels"] = labels
         definitions.append(result)
@@ -118,7 +127,7 @@ def normalize_entry(entry, language):
 
 def import_source(connection, path, language):
     if not Path(path).is_file() or Path(path).stat().st_size > MAX_DOWNLOAD:
-        raise ValueError(f"Fonte {language} ausente ou maior que 256 MiB.")
+        raise ValueError(f"Fonte {language} ausente ou maior que 1 GiB.")
     rows, total, lines = 0, 0, 0
     with gzip.open(path, "rb") as source:
         while True:
@@ -169,8 +178,10 @@ def build_database(paths, destination):
                                      "licenseUrl": LICENSE_URL, "attribution": "Colaboradores do Wikcionário/Wiktionary; extração Wiktextract/Kaikki.org.",
                                      "changes": "Filtragem por idioma e reorganização para consulta local; definições e exemplos preservados."}
             connection.execute("CREATE INDEX entries_lookup ON entries(language,lookup)")
+            headwords = dict(connection.execute("SELECT language, COUNT(DISTINCT lookup) FROM entries GROUP BY language"))
             manifest = {"format": FORMAT, "builtAt": datetime.now(timezone.utc).isoformat(), "counts": counts,
-                        "sources": sources, "notes": "Português: Wikcionário. Inglês: Simple English Wiktionary, cobertura reduzida. Nenhuma consulta requer internet."}
+                        "headwords": headwords, "sources": sources,
+                        "notes": "Português: Wikcionário. Inglês: edição English Wiktionary, filtrada para o idioma inglês. Entradas e formas distintas incluem flexões, expressões e nomes próprios. Nenhuma consulta requer internet."}
             connection.execute("INSERT INTO metadata VALUES ('manifest',?)", (json.dumps(manifest, ensure_ascii=False),))
             connection.commit()
             result = connection.execute("PRAGMA integrity_check").fetchone()[0]
@@ -190,8 +201,8 @@ def build_database(paths, destination):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Reconstrói o dicionário offline do Trama a partir de dados abertos.")
     parser.add_argument("--pt", type=Path, help="Arquivo ptwiktionary JSONL.gz já baixado")
-    parser.add_argument("--en", type=Path, help="Arquivo Simple English Wiktionary JSONL.gz já baixado")
-    parser.add_argument("--download-dir", type=Path, help="Baixar fontes ausentes nesta pasta (~42 MB); use uma pasta de trabalho")
+    parser.add_argument("--en", type=Path, help="Arquivo English Wiktionary filtrado para inglês, JSONL.gz já baixado")
+    parser.add_argument("--download-dir", type=Path, help="Baixar fontes ausentes nesta pasta (~572 MB); use uma pasta de trabalho")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parent / "resources" / "dictionary.sqlite")
     args = parser.parse_args(argv)
     try:

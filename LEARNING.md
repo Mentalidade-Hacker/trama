@@ -29,3 +29,23 @@ Uma classe gramatical indica como uma palavra funciona: substantivos nomeiam; ve
 Os verbetes do Wikcionário/Wiktionary continuam com sua atribuição e licença. Alguns verbetes da base não trazem frases de exemplo. Quando a palavra tem uma lição no Trama, seus exemplos bilíngues aparecem separadamente como **Exemplos para estudo · Trama**. Para qualquer palavra consultada, **Aprender esta palavra** permite montar um cartão e praticar uma frase própria; não há promessa de exemplos autorais para todos os verbetes.
 
 Significados podem variar conforme o contexto. As alternativas das lições incluem observações de uso; não são uma lista de substituições automáticas.
+
+## Rascunhos recuperáveis na versão 0.9
+
+O campo **Uma frase que seja sua**, em **Aprender a escrever**, salva cada alteração no navegador e, após uma pausa curta, no banco deste computador. O aviso abaixo do campo diferencia cópia no navegador, confirmação no disco e falha. Ao abrir a aprendizagem novamente, o último rascunho com texto é retomado; **Retomar um rascunho** permite escolher outro. **Salvar rascunhos agora** tenta novamente se houve falha.
+
+Os rascunhos incluem o contexto da atividade, inclusive palavras consultadas e correções. São distintos de **Guardar minha prática**: o salvamento automático não cria tentativas nem atribui progresso. Duas janelas que alteram o mesmo rascunho preservam versões separadas. Apagar o texto de uma atividade salva esse campo vazio, sem ressuscitar a versão anterior.
+
+Os rascunhos são locais e entram no **backup completo da 0.9**. Eles não entram nos snapshots de sincronização das notas. Para levar uma prática ao outro computador pelo Proton, use **Guardar minha prática**; o registro passa a integrar o grafo sincronizado. O campo separado de exercício no painel de tradução mantém o comportamento da versão anterior e não faz parte deste salvamento automático.
+
+Limites: 12.000 unidades UTF-16 por texto (um emoji pode contar como duas), 2.000 rascunhos e 16 MB de dados no total. A cópia do navegador prioriza rascunhos pendentes e guarda até 50 cópias já confirmadas; todos os confirmados continuam no banco. Navegação privada, limpeza de dados do navegador ou falta de espaço podem impedir essa camada de recuperação. Se o aviso disser que nenhuma gravação foi confirmada, mantenha a janela aberta e copie o texto. Depois de restaurar outro backup, cópias antigas do navegador só voltam mediante escolha explícita.
+
+## Sugestões a partir da sua escrita
+
+Na barra da página, abra **Explorar palavras** e escolha Português ou English. O Trama procura repetições relevantes e oferece opções para palavras de uma base autoral de **40 famílias: 20 em português e 20 em inglês**. Para repetições sem alternativa cadastrada, oferece consulta ao dicionário, sem inventar sinônimos. Uma opção pode aparecer mesmo sem repetição.
+
+Escolha a ocorrência, leia significado, exemplo, observação de uso e prévia. Ao aceitar, só aquela ocorrência muda e um cartão vai para **Aprender a escrever → Revisar**. Texto e cartão são preparados juntos; se a gravação falhar, ambos ficam pendentes e o botão de tentar novamente não duplica o cartão. O comando de desfazer do grafo também pode desfazer esse par de alterações.
+
+Links, referências, código, fórmulas, endereços e outros trechos protegidos não são alterados. Se o texto mudou desde a consulta, é necessário consultar novamente. A análise limita-se a 200.000 caracteres por consulta e informa quando há truncamento. A sugestão discreta durante a digitação é opcional e vem desligada; não substitui palavras automaticamente.
+
+As opções são material de estudo com diferenças de sentido. A aplicação não compreende integralmente a intenção da frase, não classifica toda palavra em contexto e não garante que uma alternativa seja adequada. Uma palavra simples e precisa pode ser a melhor escolha. A qualidade da escrita não é medida pela complexidade do vocabulário.

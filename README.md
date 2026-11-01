@@ -1,26 +1,26 @@
-# Trama 0.8
+# Trama 0.9
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.8 melhora a **sincronização automática opcional** com comparação de versões antes de resolver conflitos, retomada de falhas e indicação separada de verificação, envio e recebimento. O tamanho das letras pode ser ajustado de 80% a 200%. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.9 adiciona **rascunhos de aprendizagem salvos automaticamente**, amplia o dicionário inglês, sugere escolhas de vocabulário com revisão espaçada e inclui **backup completo com restauração guiada**. Mantém a sincronização automática opcional e a comparação de conflitos da 0.8. O tamanho das letras pode ser ajustado de 80% a 200%. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
-Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Recomenda-se usar a **0.8 nos dois computadores** para obter as melhorias de conferência e comparação. O formato das cópias continua compatível com a 0.7.
+Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Recomenda-se usar a **0.9 nos dois computadores** para obter as melhorias de conferência e comparação. O formato das cópias continua compatível com a 0.7.
 
-- [Trama 0.8 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.8/trama-v0.8-windows-linux.zip).
-- [Trama 0.8 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.8/trama-v0.8-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.8](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.8/trama-v0.8-SHA256.txt).
+- [Trama 0.9 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9/trama-v0.9-windows-linux.zip).
+- [Trama 0.9 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9/trama-v0.9-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.9](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9/trama-v0.9-SHA256.txt).
 
 Extraia o pacote. Com **Python 3.10 ou mais recente** e um navegador atual, abra `start.cmd` no Windows ou execute `bash start.sh` no Arch Linux. Os detalhes estão nas seções abaixo. Os pacotes contêm código-fonte e lançadores, não um executável independente do Python.
 
-**Se você usar `git clone` ou o botão Code → Download ZIP:** essa cópia contém o código, mas não o arquivo gerado `resources/dictionary.sqlite`, de aproximadamente 88,5 MB. Para habilitar os significados, copie esse arquivo da pasta `trama/resources` do pacote completo para `resources` da sua cópia, ou execute na raiz do repositório:
+**Se você usar `git clone` ou o botão Code → Download ZIP:** essa cópia contém o código, mas não o arquivo gerado `resources/dictionary.sqlite`, de aproximadamente 494 MB. Para habilitar os significados, copie esse arquivo da pasta `trama/resources` do pacote completo para `resources` da sua cópia, ou execute na raiz do repositório:
 
 ```bash
 python build_dictionary.py --download-dir work/dictionary-source
 ```
 
-Esse comando baixa aproximadamente 42 MB de fontes abertas e reconstrói o dicionário local. Consulte [resources/README.md](resources/README.md) para os detalhes. Os avisos e licenças dos componentes incluídos estão em [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); eles não definem uma licença geral para o código próprio do Trama.
+Esse comando baixa aproximadamente 572 MB de fontes abertas e reconstrói o dicionário local. Consulte [resources/README.md](resources/README.md) para os detalhes. Os avisos e licenças dos componentes incluídos estão em [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md); eles não definem uma licença geral para o código próprio do Trama.
 
 ## Escolher a aparência
 
@@ -224,7 +224,7 @@ A ortografia fica **ativa enquanto você digita**, com dicionários locais inclu
 
 A gramática analisa a frase após uma pausa e usa o LanguageTool local. Ative uma vez abrindo **setup-writing.cmd** no Windows. No Arch, use `sudo pacman -S --needed languagetool` ou `bash setup-writing.sh --portable-java`. O instalador portátil baixa o servidor e Java quando necessário; depois as análises ficam no computador. A primeira análise inicia o motor e pode levar alguns segundos.
 
-O botão **Dicionário** e o atalho **Alt + Shift + D** consultam a palavra selecionada sem internet. O pacote inclui **401.459 entradas em português** e **61.743 em inglês simplificado**, com definições e exemplos quando disponíveis. Esses números contam entradas por classe/flexão, não palavras únicas. **Guardar significado** adiciona um cartão ao vocabulário com a fonte e a licença.
+O botão **Dicionário** e o atalho **Alt + Shift + D** consultam a palavra selecionada sem internet. O pacote inclui **401.459 entradas em português** e **1.497.827 na edição inglesa completa do Wiktionary**, com definições e exemplos quando disponíveis. Esses números contam entradas por classe/flexão, não palavras únicas. **Guardar significado** adiciona um cartão ao vocabulário com a fonte e a licença.
 
 Links, referências, código e fórmulas são protegidos. Limite automático de 20 mil unidades UTF-16 por campo; resultados antigos são descartados quando o texto muda. Palavras aceitas e preferência de idioma ficam neste navegador. A consulta de significados não cobre todas as palavras reconhecidas pelo corretor. Veja [WRITING.md](WRITING.md) e [DICTIONARY.md](DICTIONARY.md).
 
@@ -232,7 +232,13 @@ Links, referências, código e fórmulas são protegidos. Limite automático de 
 
 Abra **Aprender a escrever** na barra lateral para estudar palavras novas e praticar o uso delas. O material inicial reúne 60 lições de vocabulário (30 pares português/inglês), todas com duas frases traduzidas, observações de uso, alternativas contextualizadas e exercícios, além de 12 lições curtas de escrita.
 
-Os alertas do editor têm **Entender e praticar** para levar uma correção real ao estudo. No dicionário, as classes gramaticais ganham explicações simples e os exemplos do material de estudo aparecem separados dos exemplos da fonte. É possível guardar palavras próprias, tentativas e cartões de revisão no grafo; o progresso acompanha os backups e snapshots. Não há avaliação automática de redação livre ou promessa de exemplos para todos os verbetes. Veja [LEARNING.md](LEARNING.md).
+Os alertas do editor têm **Entender e praticar** para levar uma correção real ao estudo. No dicionário, as classes gramaticais ganham explicações simples e os exemplos do material de estudo aparecem separados dos exemplos da fonte. É possível guardar palavras próprias, tentativas e cartões de revisão no grafo; o progresso acompanha os backups e snapshots. Não há avaliação automática de redação livre ou promessa de exemplos para todos os verbetes. Os rascunhos de **Aprender a escrever** agora são recuperados ao reabrir, com uma lista para retomar atividades. Em uma página, **Explorar palavras** oferece alternativas com significado, exemplo e cautela de uso; aceitar uma ocorrência também cria um cartão em **Aprender a escrever → Revisar**. Veja [LEARNING.md](LEARNING.md).
+
+## Backup completo e restauração guiada
+
+Abra **Dados e backups → Backup completo e restauração guiada**. Um ZIP reúne notas, anexos, as até 100 revisões ainda disponíveis, rascunhos de aprendizagem e preferências permitidas do navegador. Não inclui credenciais, identidade de outro dispositivo, caminhos locais, dicionário nem motores/modelos instalados. O assistente inspeciona o arquivo, mostra um resumo, pede confirmação e guarda uma cópia anterior antes de aplicar. Após restaurar, a sincronização fica desligada até você conferir e reconectar. Veja [BACKUP.md](BACKUP.md).
+
+Limites deste formato: 256 MB de conteúdo expandido, 5.000 anexos, 20 MB por anexo. Se exceder o limite, a exportação falha claramente; não corta o conteúdo. O arquivo não é criptografado pelo Trama.
 
 ## Pastas de dados e recuperação
 
@@ -243,7 +249,7 @@ Os alertas do editor têm **Entender e praticar** para levar uma correção real
 
 Se já existir `~/.local/share/trama/trama.db` no Windows, esse local antigo continua sendo usado para evitar migração silenciosa. `XDG_DATA_HOME` explícito e `--data-dir` permitem outros destinos; o terminal informa o caminho.
 
-Dentro da pasta ficam `trama.db`, `attachments/`, `backups/`, `sync-config.json` quando configurado e `sync-recovery/` quando necessário. Arquivos `trama.db-wal`/`trama.db-shm` podem existir durante o uso; preserve-os junto do banco.
+Dentro da pasta ficam `trama.db`, `attachments/`, `backups/`, `full-backups/`, `sync-config.json` quando configurado e `sync-recovery/` quando necessário. Arquivos `trama.db-wal`/`trama.db-shm` podem existir durante o uso; preserve-os junto do banco.
 
 Backups SQLite são criados na inicialização, por solicitação e antes de substituições; são mantidas as **20 cópias mais recentes**. Eles não duplicam os anexos. Para restaurar manualmente: encerre o servidor, guarde a pasta inteira, mova o banco atual e auxiliares para recuperação, copie o backup escolhido como `trama.db`, preserve `attachments` e reinicie.
 
@@ -261,3 +267,5 @@ node --test tests/*.test.mjs
 Node.js é usado apenas nos testes de desenvolvimento. A aplicação usa Python padrão e recursos HTML/CSS/JavaScript locais, sem compilação. Bibliotecas e licenças ficam em `web/vendor`.
 
 Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A sincronização automática troca versões completas e pausa quando há divergências; não oferece a edição colaborativa simultânea do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).
+
+O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.9.md](TESTE-PROTON-0.9.md). O relatório da versão distingue testes executados e verificações pendentes: [RELEASE-v0.9.md](RELEASE-v0.9.md).

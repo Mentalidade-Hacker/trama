@@ -114,15 +114,18 @@ class StorageFeatures:
         path = self.folder / filename
         # Exclusive create + immutable storage names keep imports atomic even
         # while another tab reads an attachment from the old vault.
+        created = False
         try:
             with path.open("xb") as file:
+                created = True
                 file.write(content)
                 file.flush()
                 os.fsync(file.fileno())
             if os.name != "nt":
                 path.chmod(0o600)
         except Exception:
-            path.unlink(missing_ok=True)
+            if created:
+                path.unlink(missing_ok=True)
             raise
         return filename
 

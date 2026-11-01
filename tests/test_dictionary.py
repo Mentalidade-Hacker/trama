@@ -32,7 +32,9 @@ def fixture_sources(home):
         {"word": "palavra de outro idioma", "lang_code": "es", "senses": [{"glosses": ["não deve entrar"]}]},
         {"word": "sem definição", "lang_code": "pt", "senses": [{"tags": ["no-gloss"]}]}])
     write_source(paths["en"], [{"word": "Test", "lang_code": "en", "pos": "noun", "senses": [
-        {"glosses": ["fixture meaning"], "examples": [{"text": "Fixture example.", "translation": "Tradução do exemplo de teste."}]}]}])
+        {"glosses": ["fixture meaning"], "synonyms": [{"word": "trial"}, {"word": "trial"}, {"word": "assessment"}, {"word": 12}],
+         "examples": [{"text": "Fixture example.", "translation": "Tradução do exemplo de teste."}]}],
+        "synonyms": [{"word": "not attached to this meaning"}]}])
     return paths
 
 
@@ -67,8 +69,35 @@ class DictionaryTests(unittest.TestCase):
         self.assertFalse(self.service.lookup("acao", "pt")["found"])
         result = self.service.lookup("test", "en")
         self.assertEqual(result["entries"][0]["word"], "Test")
-        self.assertIn("simplificado", result["notice"])
+        self.assertIn("Wiktionary em inglês", result["notice"])
+        self.assertEqual(result['entries'][0]['source']['url'], 'https://en.wiktionary.org/wiki/Test')
         self.assertEqual(result["entries"][0]["definitions"][0]["examples"][0]["translation"], "Tradução do exemplo de teste.")
+
+    def test_synonyms_remain_bound_to_their_original_sense(self):
+        definition = self.service.lookup('test', 'en')['entries'][0]['definitions'][0]
+        self.assertEqual(definition['synonyms'], ['trial', 'assessment'])
+        self.assertNotIn('not attached to this meaning', definition['synonyms'])
+
+    def test_old_simple_english_database_keeps_its_original_attribution(self):
+        metadata = dict(self.manifest)
+        metadata['sources']['en'] = {'name': 'Simple English Wiktionary', 'url': 'https://kaikki.org/simplewiktionary/raw-wiktextract-data.jsonl.gz'}
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("UPDATE metadata SET value=? WHERE key='manifest'", (json.dumps(metadata),))
+            connection.commit()
+        result = self.service.lookup('test', 'en')
+        self.assertEqual(result['entries'][0]['source']['url'], 'https://simple.wiktionary.org/wiki/Test')
+        self.assertIn('simplificado', result['notice'])
+        self.assertEqual(self.service.status()['sources'][1]['name'], 'Simple English Wiktionary')
+
+    def test_download_cache_does_not_reuse_old_simple_english_filename(self):
+        old = self.home / 'en-wiktextract.jsonl.gz'
+        old.write_bytes(b'old simple dictionary')
+        current = self.home / dictionary.SOURCES['en']['filename']
+        current.write_bytes(b'new full English source')
+        with patch('build_dictionary.urllib.request.urlopen', side_effect=AssertionError('download is already present')):
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(builder.download_source('en', self.home), current)
+        self.assertNotEqual(current, old)
 
     def test_absent_word_and_sql_looking_query_are_read_only(self):
         before = self.database.read_bytes()
@@ -86,6 +115,9 @@ class DictionaryTests(unittest.TestCase):
         status = self.service.status()
         self.assertTrue(status["available"])
         self.assertEqual(status["counts"], {"pt": 2, "en": 1})
+        self.assertEqual(self.manifest['headwords'], {'pt': 1, 'en': 1})
+        self.assertEqual(self.manifest['sources']['en']['name'], 'English Wiktionary')
+        self.assertIn('/dictionary/English/', self.manifest['sources']['en']['url'])
         self.assertEqual(self.manifest["sources"]["pt"]["sha256"], builder.sha256(self.paths["pt"]))
         self.assertFalse(self.service.lookup("sem definição", "pt")["found"])
         self.assertFalse(self.service.lookup("palavra de outro idioma", "pt")["found"])
