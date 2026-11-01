@@ -12,6 +12,8 @@ import {setupLearning} from './learning-ui.js';
 import {setupVocabulary} from './vocabulary-suggestions.js';
 import {setupBackup} from './backup-ui.js';
 import {setupUpdates} from './update-ui.js';
+import {pairTypedLink,stepOverLinkClose,linkCompletionEnd} from './link-editing.js';
+import {reviewWriting} from './writing-review.js';
 import { maskMarkup, applySuggestion, isProtectedRange } from './proofread.js';
 
 const $ = s => document.querySelector(s);
@@ -33,10 +35,10 @@ function toast(message) { $('#toast').textContent=message; $('#toast').hidden=fa
 function status(text, error=false) { $('#save-status').textContent=text; $('#save-status').classList.toggle('error',error); }
 function checkpoint() { const snap=JSON.stringify(data); if (undo.at(-1)!==snap) undo.push(snap); if(undo.length>80)undo.shift(); redo=[]; }
 function persistUI() { try { localStorage.setItem('trama-favorites',JSON.stringify(favorites)); localStorage.setItem('trama-recent',JSON.stringify(recent)); } catch {} }
-function materialize() { for(const {block} of C.walkBlocks([...data.pages])) for(const title of C.extractLinks(block.text)) { try { C.ensurePage(data,title); } catch {} } }
-function changed(pageId) {
+function materialize(skipBlock=null) { const count=data.pages.length;for(const {block} of C.walkBlocks([...data.pages])) {if(block.id===skipBlock)continue;for(const title of C.extractLinks(block.text)) { try { C.ensurePage(data,title); } catch {} }}return data.pages.length!==count; }
+function changed(pageId,{deferLinks=false}={}) {
   if(pageId && pageById(pageId))pageById(pageId).updated=new Date().toISOString();
-  materialize(); dirty=true; generation++; liveSync?.touch(); status('Alterações pendentes'); clearTimeout(saveTimer); saveTimer=setTimeout(save,450); renderNav();
+  materialize(deferLinks?editing?.id:null); dirty=true; generation++; liveSync?.touch(); status('Alterações pendentes'); clearTimeout(saveTimer); saveTimer=setTimeout(save,450); renderNav();
 }
 async function save() {
   clearTimeout(saveTimer); if(!dirty || saving || conflict)return;
@@ -137,6 +139,7 @@ function renderPage() {
   return `<div class="page-eyebrow">${dateLabel(page.title)?'NOTAS DIÁRIAS':'MEU GRAFO'} <span> / </span> ${focus?'BLOCO':'PÁGINA'}</div>${focus?`<div class="zoom-crumb"><a href="#p/${encodeURIComponent(page.id)}">${esc(page.title)}</a> / Bloco</div>`:''}<div class="page-heading"><h1><button class="title-button" data-action="rename" title="Renomear página">${esc(page.title)}</button></h1><button data-action="favorite" title="Adicionar aos atalhos">${favorites.includes(page.id)?'★':'☆'}</button><button data-action="page-menu" title="Opções da página">⋯</button></div><p class="page-subtitle">${esc(dateLabel(page.title)||'Uma página, muitas conexões.')} ${focus?'· Clique no nome acima para voltar à página.':''}</p><div class="language-bar"><span>Traduzir página:</span><button data-translate-page="pt" title="Traduzir do inglês para português">Português</button><button data-translate-page="en" title="Traduzir do português para inglês">English</button><button data-writing-settings>Revisão ao digitar</button><button data-vocabulary-open>Meu vocabulário</button><button data-vocabulary-suggest>Explorar palavras</button></div><ul class="outline">${(focus?[focus.block]:page.blocks).map(b=>blockHTML(b)).join('')}</ul><button class="add-block" data-action="add-block">+ Adicionar bloco</button><p class="editor-hint"><kbd>Enter</kbd> novo bloco &nbsp; <kbd>Tab</kbd> recuar &nbsp; <kbd>[[</kbd> conectar página &nbsp; <kbd>((</kbd> referenciar bloco</p>${focus?`<details class="references" open><summary>Referências a este bloco <span>${refEntries.length}</span></summary>${refEntries.map(e=>`<div class="reference-entry" data-goto="${esc(e.block.id)}">${esc(e.page.title)} · ${esc(e.block.text)}</div>`).join('')}</details>`:references(page)}`;
 }
 function render() {
+  if(!editing&&materialize())changed();
   rightStack=rightStack.filter(item=>pageById(item.page));
   suggestions=[]; completion=null;
   $('#breadcrumb').textContent=view==='page'?`Meu grafo / ${pageById(current)?.title||''}`:view==='graph'?'Meu grafo / Visão do grafo':view==='journals'?'Meu grafo / Diário contínuo':'Meu grafo / Todas as páginas';
@@ -169,7 +172,7 @@ function renderGraph(filter='') {
 document.addEventListener('trama:typography',()=>requestAnimationFrame(resizeEditors));
 window.addEventListener('resize',()=>requestAnimationFrame(resizeEditors));
 function resizeEditors(){document.querySelectorAll('.block-editor').forEach(el=>{el.style.height='auto';el.style.height=el.scrollHeight+'px';});}
-function edit(id,scope='main',pos=null,record=true){const entry=C.findBlock(data,id);if(!entry)return; if(record&&editing?.id!==id)checkpoint();editing={id,scope};render();const el=document.querySelector(`[data-scope="${scope}"] [data-editor="${CSS.escape(id)}"]`);if(el){el.focus();const at=pos===null?el.value.length:pos;el.setSelectionRange(at,at);resizeEditors();}}
+function edit(id,scope='main',pos=null,record=true){const entry=C.findBlock(data,id);if(!entry)return; if(editing&&editing.id!==id&&materialize())changed();if(record&&editing?.id!==id)checkpoint();editing={id,scope};render();const el=document.querySelector(`[data-scope="${scope}"] [data-editor="${CSS.escape(id)}"]`);if(el){el.focus();const at=pos===null?el.value.length:pos;el.setSelectionRange(at,at);resizeEditors();}}
 function structure(id,fn,pos=null){checkpoint();const pageId=C.findBlock(data,id)?.page.id;fn();changed(pageId);edit(id,editing?.scope||'main',pos);}
 
 function complete(el) {
@@ -190,18 +193,17 @@ function acceptSuggestion(index) {
   const el=document.querySelector('.block-editor:focus')||document.querySelector('.block-editor'),s=suggestions[index];if(!el||!s||!completion)return;
   if(completion.type==='command'){const id=editing.id,entry=C.findBlock(data,id);entry.block.text=el.value.slice(0,completion.start)+el.value.slice(completion.end);changed(entry.page.id);suggestions=[];completion=null;F.execute(s.command,id);return;}
   const {start,end,type}=completion,close=type==='page'?']]':'))',value=(type==='page'?'[[':'((')+s.value+close;
-  const skip=el.value.slice(end,end+2)===close?2:0;
-  el.value=el.value.slice(0,start)+value+el.value.slice(end+skip);const pos=start+value.length;
+  el.value=el.value.slice(0,start)+value+el.value.slice(linkCompletionEnd(el.value,end,close));const pos=start+value.length;
   const entry=C.findBlock(data,editing.id);entry.block.text=el.value;changed(entry.page.id);el.focus();el.setSelectionRange(pos,pos);document.querySelectorAll('.suggestions').forEach(e=>e.remove());suggestions=[];completion=null;resizeEditors();
 }
 document.addEventListener('input',e=>{
-  if(e.target.matches('.block-editor')){const entry=C.findBlock(data,e.target.dataset.editor);entry.block.text=e.target.value;changed(entry.page.id);resizeEditors();complete(e.target);}
+  if(e.target.matches('.block-editor')){pairTypedLink(e.target,e);const entry=C.findBlock(data,e.target.dataset.editor);entry.block.text=e.target.value;changed(entry.page.id,{deferLinks:true});resizeEditors();complete(e.target);}
   if(e.target.id==='search-input')searchResults(e.target.value);
   if(e.target.id==='page-filter')renderPageList(e.target.value);
   if(e.target.id==='graph-filter')renderGraph(e.target.value);
   if(e.target.matches('[data-reference-filter]')){const q=e.target.value.toLocaleLowerCase();e.target.closest('details').querySelectorAll('.reference-group').forEach(g=>g.hidden=!g.textContent.toLocaleLowerCase().includes(q));}
 });
-document.addEventListener('focusout',e=>{if(e.target.matches('.block-editor')){const old=editing;setTimeout(()=>{if(editing===old&&!document.activeElement?.matches('.block-editor')&&!document.activeElement?.closest('.suggestions')&&!$('#modal').open&&!document.querySelector('#dictionary-dialog[open]')){editing=null;render();}},160);}});
+document.addEventListener('focusout',e=>{if(e.target.matches('.block-editor')){const old=editing;setTimeout(()=>{if(editing===old&&!document.activeElement?.matches('.block-editor')&&!document.activeElement?.closest('.suggestions')&&!$('#modal').open&&!document.querySelector('#dictionary-dialog[open]')){editing=null;if(materialize())changed();render();}},160);}});
 document.addEventListener('keydown',e=>{
   const mod=e.ctrlKey||e.metaKey;
   if(mod&&['k','u'].includes(e.key.toLowerCase())){e.preventDefault();search();return;}
@@ -213,6 +215,7 @@ document.addEventListener('keydown',e=>{
   if(!e.target.matches('.block-editor')||e.isComposing)return;
   if(!editing)editing={id:e.target.dataset.editor,scope:e.target.closest('[data-scope]').dataset.scope};
   const el=e.target,entry=C.findBlock(data,el.dataset.editor),id=entry.block.id,pos=el.selectionStart;
+  if(stepOverLinkClose(el,e)){e.preventDefault();complete(el);return;}
   if(completion&&suggestions.length&&['ArrowDown','ArrowUp','Enter','Tab'].includes(e.key)) {
     e.preventDefault();if(e.key==='Enter'||e.key==='Tab')acceptSuggestion(suggestionIndex);
     else {suggestionIndex=(suggestionIndex+(e.key==='ArrowDown'?1:-1)+suggestions.length)%suggestions.length;document.querySelectorAll('[data-suggestion]').forEach((b,i)=>b.classList.toggle('selected',i===suggestionIndex));}return;
@@ -341,7 +344,7 @@ markdownInput.onchange=async()=>{const files=[...markdownInput.files];markdownIn
 function openProofreader(id=editing?.id) {
   const entries=C.walkBlocks(data.pages).filter(e=>e.page.id===(C.findBlock(data,id)?.page.id||current)&&e.block.text.trim());
   proofTarget=entries.some(e=>e.block.id===id)?id:entries[0]?.block.id;proofRequest++;proofMatches=[];
-  modal('Ortografia e gramática',`<p>Revisão em português e inglês com o LanguageTool local. Suas notas ficam neste computador.</p><div class="proof-controls"><label>Idioma<select id="proof-language"><option value="pt-BR">Português · Brasil</option><option value="pt-PT">Português · Portugal</option><option value="en-US">English · United States</option><option value="en-GB">English · United Kingdom</option></select></label><label>Bloco a revisar<select id="proof-block">${entries.map(e=>`<option value="${esc(e.block.id)}">${esc(e.block.text.slice(0,85))}</option>`).join('')}</select></label></div><p class="proof-note">Links, referências, tags e código são preservados. Cada sugestão só é aplicada quando você a aceita.</p><button class="primary" id="proof-run" ${entries.length?'':'disabled'}>Revisar texto</button><div id="proof-results" aria-live="polite">${entries.length?'':'<p>Escreva um bloco para começar.</p>'}</div><details class="proof-setup"><summary>Como ativar o corretor local</summary><p><strong>Arch Linux:</strong> instale o pacote oficial uma vez:</p><pre><code>sudo pacman -S --needed languagetool</code></pre><p><strong>Windows:</strong> instale Java e a distribuição standalone do servidor LanguageTool. Defina a variável TRAMA_LANGUAGETOOL_DIR com a pasta que contém languagetool-server.jar; o README inclui as instruções.</p><p>Reinicie o Trama. O serviço será iniciado automaticamente ao revisar. A primeira análise pode levar alguns segundos. A ortografia em português e inglês já funciona ao digitar com os dicionários incluídos no Trama. O LanguageTool acrescenta sugestões de gramática e estilo.</p></details>`);
+  modal('Ortografia e gramática',`<p>Ortografia e regras básicas em português e inglês já funcionam localmente. O LanguageTool opcional amplia a análise de gramática e estilo.</p><div class="proof-controls"><label>Idioma<select id="proof-language"><option value="pt-BR">Português · Brasil</option><option value="pt-PT">Português · Portugal</option><option value="en-US">English · United States</option><option value="en-GB">English · United Kingdom</option></select></label><label>Bloco a revisar<select id="proof-block">${entries.map(e=>`<option value="${esc(e.block.id)}">${esc(e.block.text.slice(0,85))}</option>`).join('')}</select></label></div><p class="proof-note">Links, referências, tags e código são preservados. Cada sugestão só é aplicada quando você a aceita.</p><button class="primary" id="proof-run" ${entries.length?'':'disabled'}>Revisar texto</button><div id="proof-results" aria-live="polite">${entries.length?'':'<p>Escreva um bloco para começar.</p>'}</div><details class="proof-setup"><summary>Como ativar a gramática ampliada</summary><p>A ortografia e as regras básicas já estão incluídas. Para ampliar a análise de frases, prepare o LanguageTool uma vez.</p><p><strong>Windows:</strong> use o assistente Configurar gramática no menu Iniciar, se criado na instalação. Ele usa o Python incluído e prepara Java e LanguageTool. O pacote de código também inclui setup-writing.cmd.</p><p><strong>Arch Linux:</strong> use o assistente setup-writing.sh --portable-java ou o pacote oficial languagetool. Consulte WRITING.md para os passos.</p><p>Os downloads precisam de conexão. As análises posteriores são locais. O motor é detectado automaticamente ao voltar a escrever; a primeira análise pode levar alguns segundos.</p></details>`);
   $('#proof-language').value=proofLanguage;$('#proof-block').value=proofTarget||'';
   $('#proof-language').onchange=()=>{proofLanguage=$('#proof-language').value;try{localStorage.setItem('trama-proof-language',proofLanguage);}catch{}document.querySelectorAll('.block-editor').forEach(el=>el.lang=proofLanguage);proofRequest++;$('#proof-results').innerHTML='';};
   $('#proof-block').onchange=()=>{proofTarget=$('#proof-block').value;proofRequest++;$('#proof-results').innerHTML='';};
@@ -351,16 +354,15 @@ async function runProofread() {
   proofTarget=$('#proof-block')?.value;const entry=C.findBlock(data,proofTarget);if(!entry)return;
   const snapshot=entry.block.text,request=++proofRequest,language=$('#proof-language').value,target=entry.block.id;
   if(snapshot.length>20000){$('#proof-results').innerHTML='<p class="error-banner">Divida este texto em blocos menores. O limite é de 20 mil caracteres por revisão.</p>';return;}
-  $('#proof-run').disabled=true;$('#proof-results').innerHTML='<p class="proof-note">Analisando com o corretor local… A primeira execução inicia o LanguageTool.</p>';
+  $('#proof-run').disabled=true;$('#proof-results').innerHTML='<p class="proof-note">Verificando ortografia e escrita localmente…</p>';
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
   try {
-    const masked=maskMarkup(snapshot);
-    const res=await fetch('/api/proofread',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:masked,language}),signal:controller.signal});
-    const out=await res.json();if(!res.ok)throw Error(out.error||'Não foi possível consultar o corretor local.');
+    const out=await reviewWriting(snapshot,language,{signal:controller.signal});
     if(request!==proofRequest||!$('#proof-results'))return;
     if(C.findBlock(data,target)?.block.text!==snapshot)throw Error('O bloco mudou durante a revisão. Clique em Revisar texto novamente.');
     proofSnapshot=snapshot;proofMatches=(out.matches||[]).filter(m=>Number.isInteger(m.offset)&&Number.isInteger(m.length)&&m.length>=0&&!isProtectedRange(snapshot,m.offset,m.length));
-    $('#proof-results').innerHTML=proofMatches.length?`<p class="proof-count">${proofMatches.length} ${proofMatches.length===1?'sugestão encontrada':'sugestões encontradas'}</p>`+proofMatches.map((m,i)=>{const start=Math.max(0,m.offset-45),end=Math.min(snapshot.length,m.offset+m.length+45);return `<article class="proof-match"><span class="proof-kind">${m.rule?.issueType==='misspelling'?'ORTOGRAFIA':'GRAMÁTICA / ESTILO'}</span><p>${esc(m.message)}</p><div class="proof-context">${start?'…':''}${esc(snapshot.slice(start,m.offset))}<mark>${esc(snapshot.slice(m.offset,m.offset+m.length))}</mark>${esc(snapshot.slice(m.offset+m.length,end))}${end<snapshot.length?'…':''}</div><div class="proof-replacements">${(m.replacements||[]).slice(0,6).map((r,j)=>`<button class="secondary" data-fix-match="${i}" data-fix-replacement="${j}">${esc(r.value||'Remover')}</button>`).join('')||'<span class="proof-note">Ajuste este trecho manualmente no bloco.</span>'}</div></article>`;}).join(''):'<p class="proof-success">✓ Nenhum problema encontrado pelas regras locais neste bloco.</p>';
+    $('#proof-results').innerHTML=proofMatches.length?`<p class="proof-count">${proofMatches.length} ${proofMatches.length===1?'sugestão encontrada':'sugestões encontradas'}</p>`+proofMatches.map((m,i)=>{const start=Math.max(0,m.offset-45),end=Math.min(snapshot.length,m.offset+m.length+45);return `<article class="proof-match"><span class="proof-kind">${m.rule?.issueType==='misspelling'?'ORTOGRAFIA':'GRAMÁTICA / ESTILO'}</span><p>${esc(m.message)}</p><div class="proof-context">${start?'…':''}${esc(snapshot.slice(start,m.offset))}<mark>${esc(snapshot.slice(m.offset,m.offset+m.length))}</mark>${esc(snapshot.slice(m.offset+m.length,end))}${end<snapshot.length?'…':''}</div><div class="proof-replacements">${(m.replacements||[]).slice(0,6).map((r,j)=>`<button class="secondary" data-fix-match="${i}" data-fix-replacement="${j}">${esc(r.value||'Remover')}</button>`).join('')||'<span class="proof-note">Ajuste este trecho manualmente no bloco.</span>'}</div></article>`;}).join(''):'<p class="proof-success">Nenhum alerta nesta verificação.</p>';
+    if(out.warnings.length)$('#proof-results').insertAdjacentHTML('afterbegin','<p class="proof-note">'+esc(out.warnings.join(' · '))+'. As sugestões disponíveis aparecem abaixo.</p>');
     document.querySelectorAll('[data-fix-match]').forEach(button=>button.onclick=async()=>{
       try {const match=proofMatches[Number(button.dataset.fixMatch)],replacement=match.replacements[Number(button.dataset.fixReplacement)].value,latest=C.findBlock(data,target);if(!latest)throw Error('O bloco não existe mais.');const updated=applySuggestion(latest.block.text,match,replacement,proofSnapshot);checkpoint();latest.block.text=updated;const selectedOption=$('#proof-block option:checked');if(selectedOption)selectedOption.textContent=updated.slice(0,85);changed(latest.page.id);editing=null;render();toast('Sugestão aplicada.');await runProofread();}catch(error){toast(error.message);}
     });

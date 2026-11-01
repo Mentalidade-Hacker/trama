@@ -1,17 +1,17 @@
-# Trama 0.10.1
+# Trama 0.10.2
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-As notas funcionam sem conta e sem internet. A versão **0.10.1 traz um instalador executável para Windows, com Python incluído**: baixe, instale e abra pelo menu Iniciar. Ortografia e dicionário de significados já estão disponíveis localmente. Mantém o download automático de atualizações do aplicativo, os rascunhos recuperáveis, os exercícios de escrita, o backup completo e a sincronização opcional entre computadores. Temas claro/escuro e tamanho de texto de 80% a 200% são ajustáveis. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+As notas funcionam sem conta e sem internet. A versão **0.10.2 traz um instalador executável para Windows, com Python incluído**: baixe, instale e abra pelo menu Iniciar. Ortografia e dicionário de significados já estão disponíveis localmente. Mantém o download automático de atualizações do aplicativo, os rascunhos recuperáveis, os exercícios de escrita, o backup completo e a sincronização opcional entre computadores. Temas claro/escuro e tamanho de texto de 80% a 200% são ajustáveis. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
 **No Windows, use o instalador EXE. Não é necessário instalar Python separadamente.** O guia [WINDOWS.md](WINDOWS.md) explica os passos, a bandeja e os componentes opcionais.
 
-- [Trama 0.10.1 — instalador para Windows](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-setup.exe).
-- [Trama 0.10.1 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-linux.zip).
-- [Trama 0.10.1 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.10.1](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-SHA256.txt).
+- [Trama 0.10.2 — instalador para Windows](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/trama-v0.10.2-windows-setup.exe).
+- [Trama 0.10.2 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/trama-v0.10.2-windows-linux.zip).
+- [Trama 0.10.2 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/trama-v0.10.2-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.10.2](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/trama-v0.10.2-SHA256.txt).
 
 O EXE atende Windows 10 ou mais recente, de 64 bits, e inclui um Python privado 3.14.10 da distribuição oficial NuGet. O ZIP/TAR continua disponível para Linux e uso pelo código-fonte; exige **Python 3.10 ou mais recente** e navegador atual. Todos os pacotes completos incluem o dicionário offline. A [página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest) reúne os arquivos publicados.
 
@@ -266,7 +266,7 @@ O servidor escuta apenas em `127.0.0.1`. Limites: 32 MB por gravação, 50 mil p
 
 Os testes automatizados de modelo, consultas, componentes, corretor, armazenamento, ZIP, conflitos e sincronização rodam no ambiente de desenvolvimento Windows. O lançador Windows iniciou o servidor real. No navegador foram exercitados Datalog, fórmula, tabela, Kanban e publicação de snapshot em pasta isolada. A ortografia Hunspell real, a gramática LanguageTool real em PT/EN e o dicionário offline foram verificados, incluindo alertas e correções no navegador. A instalação no Arch, os instaladores no menu nativo e uma transferência real por conta Proton continuam exigindo validação nos respectivos ambientes. Nenhuma conta Proton foi acessada durante o desenvolvimento.
 
-O iniciador nativo da 0.10.1 foi compilado no Windows e passou por **30 verificações locais** de argumentos, seleção do runtime privado, travas e modos dos assistentes. Essas verificações não equivalem à instalação visual completa nem à validação de uma conta Proton. As suítes e os resultados de CI de cada versão devem ser conferidos na publicação correspondente; um contêiner Arch não testa o menu gráfico nativo. Veja [RELEASE-v0.10.1.md](RELEASE-v0.10.1.md) para a separação entre verificações executadas e pendentes.
+O iniciador nativo da 0.10.2 foi compilado no Windows e passou por **30 verificações locais** de argumentos, seleção do runtime privado, travas e modos dos assistentes. Essas verificações não equivalem à instalação visual completa nem à validação de uma conta Proton. As suítes e os resultados de CI de cada versão devem ser conferidos na publicação correspondente; um contêiner Arch não testa o menu gráfico nativo. Veja [RELEASE-v0.10.2.md](RELEASE-v0.10.2.md) para a separação entre verificações executadas e pendentes.
 
 ```bash
 python -m unittest discover -s tests
@@ -277,4 +277,4 @@ Node.js é usado apenas nos testes de desenvolvimento. O núcleo usa Python e re
 
 Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A sincronização automática troca versões completas e pausa quando há divergências; não oferece a edição colaborativa simultânea do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).
 
-O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.10.md](TESTE-PROTON-0.10.md). Os relatórios [0.9.1](RELEASE-v0.9.1.md) e [0.10](RELEASE-v0.10.md) permanecem disponíveis; as mudanças atuais estão em [RELEASE-v0.10.1.md](RELEASE-v0.10.1.md).
+O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.10.md](TESTE-PROTON-0.10.md). Os relatórios [0.9.1](RELEASE-v0.9.1.md) e [0.10](RELEASE-v0.10.md) permanecem disponíveis; as mudanças atuais estão em [RELEASE-v0.10.2.md](RELEASE-v0.10.2.md).

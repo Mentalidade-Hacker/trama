@@ -154,7 +154,7 @@ class WindowsPackageTests(unittest.TestCase):
     def test_builder_uses_argument_lists_preserves_spaces_and_keeps_single_installer(self):
         runner, calls = self.compiler()
         output = self.root / 'release output'
-        result = package.build(self.source, self.runtime, self.iscc, self.csc, output, work=self.root / 'work', runner=runner)
+        result = package.build(self.source, self.runtime, self.iscc, self.csc, output, version=self.manifest['version'], work=self.root / 'work', runner=runner)
         self.assertEqual(Path(result['file']).read_bytes(), b'MZinstaller')
         self.assertEqual(len(list(output.iterdir())), 1)
         self.assertEqual(list((self.root / 'work').iterdir()), [])
@@ -169,7 +169,7 @@ class WindowsPackageTests(unittest.TestCase):
         old = output / 'trama-v0.10.1-windows-setup.exe'
         old.write_bytes(b'MZprevious release')
         with self.assertRaises(subprocess.CalledProcessError):
-            package.build(self.source, self.runtime, self.iscc, self.csc, output, work=self.root / 'work', runner=runner)
+            package.build(self.source, self.runtime, self.iscc, self.csc, output, version=self.manifest['version'], work=self.root / 'work', runner=runner)
         self.assertEqual(old.read_bytes(), b'MZprevious release')
         self.assertEqual(list((self.root / 'work').iterdir()), [])
         self.assertTrue((self.source / 'server.py').is_file())

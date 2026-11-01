@@ -1,10 +1,10 @@
 # Trama no Windows
 
-O instalador da **0.10.1 inclui o programa, o dicionário offline e um Python privado**. Você não precisa instalar Python, abrir um terminal ou compilar arquivos para usar o Trama.
+O instalador da **0.10.2 inclui o programa, o dicionário offline e um Python privado**. Você não precisa instalar Python, abrir um terminal ou compilar arquivos para usar o Trama.
 
 ## Baixar e instalar
 
-1. Baixe [Trama 0.10.1 para Windows](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-setup.exe) na publicação oficial. O arquivo termina em **windows-setup.exe**.
+1. Baixe [Trama 0.10.2 para Windows](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/trama-v0.10.2-windows-setup.exe) na publicação oficial. O arquivo termina em **windows-setup.exe**.
 2. Abra o arquivo com dois cliques e siga as telas. O instalador atende Windows 10 ou mais recente de 64 bits e instala para o seu usuário.
 3. Mantenha a pasta sugerida, a menos que tenha uma necessidade específica. Se já usa o Trama, salve, faça um backup e encerre o aplicativo antes de continuar.
 4. Se quiser, marque **Criar atalho na área de trabalho**. A opção **Criar atalhos para configurar gramática e tradução** acrescenta os assistentes opcionais ao menu Iniciar.
@@ -12,7 +12,7 @@ O instalador da **0.10.1 inclui o programa, o dicionário offline e um Python pr
 
 A janela usa Edge ou Chrome quando disponíveis; caso contrário, abre no navegador padrão. O iniciador e o servidor não precisam de uma janela de terminal. O endereço é local, neste computador; abrir o aplicativo não publica suas notas na internet.
 
-O instalador e o iniciador ainda **não têm assinatura digital de um certificado do Trama**. Os arquivos oficiais e seus [hashes SHA-256](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-SHA256.txt) estão na mesma publicação. Um alerta ou bloqueio do Windows não deve ser tratado como motivo para desativar suas proteções; confira a origem e a publicação antes de decidir como prosseguir.
+O instalador e o iniciador ainda **não têm assinatura digital de um certificado do Trama**. Os arquivos oficiais e seus [hashes SHA-256](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/trama-v0.10.2-SHA256.txt) estão na mesma publicação. Um alerta ou bloqueio do Windows não deve ser tratado como motivo para desativar suas proteções; confira a origem e a publicação antes de decidir como prosseguir.
 
 ## Abrir, guardar e encerrar
 
@@ -60,4 +60,4 @@ Este é um roteiro para o equipamento onde o aplicativo será usado, não uma af
 4. Se precisar de gramática ou tradução, execute o assistente correspondente e confira uma frase real após a instalação.
 5. Aplique uma atualização de código e, separadamente, reinstale o EXE no mesmo destino. Confira notas, anexo, rascunho e configuração de sincronização depois de cada operação.
 
-O iniciador passou por **30 verificações locais reproduzíveis** de compilação, argumentos, travas e assistentes. Elas não representam uma instalação gráfica completa em todos os computadores. A execução em Arch gráfico real e a transferência com uma **conta Proton real entre Windows e Arch** continuam separadas dessa verificação. Consulte [RELEASE-v0.10.1.md](RELEASE-v0.10.1.md) e o [checklist Proton](TESTE-PROTON-0.10.md).
+O iniciador passou por **30 verificações locais reproduzíveis** de compilação, argumentos, travas e assistentes. Elas não representam uma instalação gráfica completa em todos os computadores. A execução em Arch gráfico real e a transferência com uma **conta Proton real entre Windows e Arch** continuam separadas dessa verificação. Consulte [RELEASE-v0.10.2.md](RELEASE-v0.10.2.md) e o [checklist Proton](TESTE-PROTON-0.10.md).
