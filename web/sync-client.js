@@ -5,8 +5,13 @@ export function createSyncClient(options) {
   const client=options.client||globalThis.crypto?.randomUUID?.()||`browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   let touchedAt=-Infinity, activityVersion=0, epoch=0, stopped=false, polling=false, timer=null;
   let sending=false, pendingActivity=null, lastBusy=null, lastSent=-Infinity;
+  const holds=new Set();
   const state=()=>options.getState();
-  const busy=()=>{const s=state();return s.ready===false||s.dirty||s.saving||s.conflict||now()-touchedAt<idleMs;};
+  const busy=()=>{
+    // A composing editor may be removed during navigation without a focusout.
+    for(const key of holds)if(key?.isConnected===false)holds.delete(key);
+    const s=state();return holds.size>0||s.ready===false||s.dirty||s.saving||s.conflict||now()-touchedAt<idleMs;
+  };
   async function drainActivity() {
     if(sending)return;
     sending=true;
@@ -22,6 +27,8 @@ export function createSyncClient(options) {
     }
   }
   function touch(){touchedAt=now();activityVersion++;activity();}
+  function hold(key){holds.add(key);touch();}
+  function release(key){if(holds.delete(key))touch();}
   function guard(snapshot,version,startEpoch) {
     const s=state();return !stopped&&epoch===startEpoch&&!busy()&&activityVersion===version&&s.revision===snapshot.revision&&s.generation===snapshot.generation;
   }
@@ -44,5 +51,17 @@ export function createSyncClient(options) {
   }
   function start(){if(timer)return;stopped=false;activity(true);timer=setInterval(()=>void poll(),options.intervalMs??2000);void poll();}
   function stop(){stopped=true;epoch++;clearInterval(timer);timer=null;pendingActivity=null;}
-  return {client,touch,activity,poll,start,stop,busy};
+  return {client,touch,hold,release,activity,poll,start,stop,busy};
+}
+
+/** Keep unfinished input-method composition protected beyond the ordinary idle delay. */
+export function bindSyncActivity(client,root) {
+  const selector='input,textarea,select,[contenteditable="true"]',composing=new Set(),listeners=[];
+  const editable=target=>target?.matches?.(selector);
+  const on=(type,callback)=>{root.addEventListener(type,callback,true);listeners.push([type,callback]);};
+  for(const type of ['input','change','focusin'])on(type,event=>{if(editable(event.target))client.touch();});
+  on('compositionstart',event=>{if(editable(event.target)){composing.add(event.target);client.hold(event.target);}});
+  const finish=event=>{if(composing.delete(event.target))client.release(event.target);};
+  on('compositionend',finish);on('focusout',finish);
+  return ()=>{for(const [type,callback] of listeners)root.removeEventListener(type,callback,true);for(const target of composing)client.release(target);composing.clear();};
 }

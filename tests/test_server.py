@@ -167,6 +167,19 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request("PUT", "/api/state", "{oops", headers)[0], 400)
         self.assertEqual(self.request("PUT", "/api/state", json.dumps({"data": graph()}), headers)[0], 400)
 
+    def test_sync_check_and_preview_routes_require_local_origin_and_valid_json(self):
+        self.server.auto_sync = MagicMock()
+        self.server.auto_sync.request_check.return_value = {"configured": True, "auto": {"state": "checking"}}
+        headers = {"Content-Type": "application/json"}
+        self.assertEqual(self.request("POST", "/api/sync/check", "{}", {**headers, "Origin": "https://evil.example"})[0], 403)
+        self.server.auto_sync.request_check.assert_not_called()
+        status, body = self.request("POST", "/api/sync/check", "{}", headers)
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["auto"]["state"], "checking")
+        self.assertEqual(self.request("POST", "/api/sync/check", "[]", headers)[0], 400)
+        self.assertEqual(self.request("POST", "/api/sync/preview", "{}", {**headers, "Origin": "https://evil.example"})[0], 403)
+        self.assertEqual(self.request("POST", "/api/sync/preview", "[]", headers)[0], 400)
+
     def test_proofreader_routes_and_security(self):
         self.server.proofreader = MagicMock()
         self.server.proofreader.status.return_value = {"available": True}

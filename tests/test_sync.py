@@ -1,4 +1,5 @@
 import hashlib
+import base64
 import json
 from pathlib import Path
 import sys
@@ -163,6 +164,77 @@ class SyncTests(unittest.TestCase):
             self.a.sync.configure({"folder": str(self.root / "absent")})
         self.assertEqual(list(self.folder.iterdir()), [])
         self.assertTrue(self.a.sync.status()["configured"])
+
+    def test_configuration_write_failure_keeps_previous_memory_and_disk_connection(self):
+        before = self.a.sync.configuration()
+        saved = self.a.sync.config_path.read_bytes()
+        fresh = self.root / "new-connection"
+        fresh.mkdir()
+        with patch("sync_store.os.replace", side_effect=OSError("disk full")), self.assertRaises(OSError):
+            self.a.sync.configure({"folder": str(fresh), "automatic": True, "deviceName": "Another computer"})
+        self.assertEqual(self.a.sync.configuration(), before)
+        self.assertEqual(self.a.sync.config_path.read_bytes(), saved)
+        self.assertEqual(Store(self.a.directory).sync.configuration(), before)
+        self.assertEqual(list(self.a.directory.glob(".sync-config-*.tmp")), [])
+        self.assertEqual(list(fresh.iterdir()), [])
+
+    def test_device_name_is_optional_normalized_and_validated(self):
+        state = self.a.sync.configure({"folder": str(self.folder), "deviceName": "  Meu computador · Arch  "})
+        self.assertEqual(state["deviceName"], "Meu computador · Arch")
+        self.assertEqual(Store(self.a.directory).sync.config["deviceName"], "Meu computador · Arch")
+        before = self.a.sync.configuration()
+        for value in (None, True, 12, "", " ", "a" * 81, "line\nbreak", "tab\there", "C1\x85control", "bad\ud800"):
+            with self.subTest(value=repr(value)), self.assertRaises(SyncError):
+                self.a.sync.configure({"folder": str(self.folder), "deviceName": value})
+            self.assertEqual(self.a.sync.configuration(), before)
+
+    def test_receive_requires_the_same_revision_hash_and_heads_as_its_preview(self):
+        from sync_preview import preview_snapshot
+        self.save(self.a, "remote")
+        ident = self.publish(self.a)["id"]
+        self.save(self.b, "local preserved")
+        comparison = preview_snapshot(self.b, {"id": ident, "revision": self.b.revision()})
+        before = self.b.read()
+        for key, value in (("fingerprint", "0" * 64), ("snapshotHash", "0" * 64), ("heads", [])):
+            token = {**comparison["preview"], key: value}
+            with self.subTest(key=key), self.assertRaises(SyncError) as caught:
+                self.b.sync.receive({"id": ident, "revision": comparison["revision"], "preview": token})
+            self.assertEqual(caught.exception.code, "sync_preview_stale")
+            self.assertEqual(caught.exception.status, 409)
+            self.assertEqual(self.b.read(), before)
+            self.assertFalse(self.b.sync.recovery_folder.exists())
+        for token in (None, {}, {**comparison["preview"], "heads": [ident, ident]}):
+            with self.assertRaises(SyncError) as caught:
+                self.b.sync.receive({"id": ident, "revision": comparison["revision"], "preview": token})
+            self.assertEqual(caught.exception.code, "sync_preview_invalid")
+        result = self.b.sync.receive({"id": ident, "revision": comparison["revision"], "preview": comparison["preview"]})
+        self.assertIsNotNone(result["recovery"])
+        self.assertEqual(self.b.read()["data"], graph("remote"))
+
+    def test_receive_preview_detects_attachment_and_remote_changes_without_revision_change(self):
+        from sync_preview import preview_snapshot
+        self.save(self.a, "first remote")
+        ident = self.publish(self.a)["id"]
+        comparison = preview_snapshot(self.b, {"id": ident, "revision": self.b.revision()})
+        self.b.features.upload({"name": "local.txt", "type": "text/plain", "data": base64.b64encode(b"keep").decode()})
+        self.assertEqual(self.b.revision(), comparison["revision"])
+        with self.assertRaises(SyncError) as caught:
+            self.b.sync.receive({"id": ident, "revision": comparison["revision"], "preview": comparison["preview"]})
+        self.assertEqual(caught.exception.code, "sync_preview_stale")
+        self.assertEqual(len(self.b.features.list()), 1)
+        comparison = preview_snapshot(self.b, {"id": ident, "revision": self.b.revision()})
+        self.save(self.a, "second remote")
+        self.publish(self.a)
+        with self.assertRaises(SyncError) as caught:
+            self.b.sync.receive({"id": ident, "revision": comparison["revision"], "preview": comparison["preview"]})
+        self.assertEqual(caught.exception.code, "sync_preview_stale")
+        comparison = preview_snapshot(self.b, {"id": ident, "revision": self.b.revision()})
+        self.save(self.b, "new local edit")
+        with self.assertRaises(SyncError) as caught:
+            self.b.sync.receive({"id": ident, "revision": comparison["revision"], "preview": comparison["preview"]})
+        self.assertEqual(caught.exception.code, "sync_preview_stale")
+        self.assertEqual(self.b.read()["data"], graph("new local edit"))
+        self.assertFalse(self.b.sync.recovery_folder.exists())
 
     def test_live_database_is_never_copied_to_transport(self):
         self.save(self.a, "safe")

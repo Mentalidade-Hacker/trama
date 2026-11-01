@@ -24,8 +24,8 @@ HEX_HASH = re.compile(r"^[a-f0-9]{64}$")
 DOWNLOAD_PAGE = "https://proton.me/download/drive/cli/index.html"
 
 
-def file_hash(path):
-    digest = hashlib.sha256()
+def file_hash(path, algorithm="sha256"):
+    digest = hashlib.new(algorithm)
     with Path(path).open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
@@ -35,6 +35,11 @@ def file_hash(path):
 def safe_file(path):
     path = Path(path)
     return path.is_file() and not path.is_symlink()
+
+
+def file_signature(path):
+    stat = Path(path).stat()
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
 
 
 def snapshot_pair(folder, snapshot_id, cache=None):
@@ -88,10 +93,10 @@ def remote_folder(value):
     return value
 
 
-def remote_names(payload):
+def remote_entries(payload):
     if not isinstance(payload, list):
         raise ValueError("Formato inesperado da listagem do Proton Drive. Atualize a CLI oficial.")
-    names = set()
+    entries = {}
     for item in payload:
         if not isinstance(item, dict):
             raise ValueError("Item inválido na listagem do Proton Drive.")
@@ -105,10 +110,29 @@ def remote_names(payload):
         if SNAPSHOT_NAME.fullmatch(name):
             if item.get("type") != "file":
                 raise ValueError(f"Existe uma pasta com nome de cópia no Drive: {name}")
-            if name in names:
+            if name in entries:
                 raise ValueError(f"Nome duplicado no Drive: {name}")
-            names.add(name)
-    return names
+            entries[name] = item
+    return entries
+
+
+def remote_names(payload):
+    return set(remote_entries(payload))
+
+
+def transfer_count(payload):
+    """Accept the official CLI's single-file JSON summary, including skips."""
+    try:
+        summary = json.loads(payload)
+    except (TypeError, ValueError):
+        raise ValueError("O Proton não confirmou a transferência. Atualize a CLI oficial e tente novamente.") from None
+    keys = ('transferredItems', 'skippedItems', 'failedItems')
+    if (not isinstance(summary, dict)
+            or any(type(summary.get(key)) is not int or summary[key] < 0 for key in keys)
+            or summary['failedItems'] != 0
+            or summary['transferredItems'] + summary['skippedItems'] != 1):
+        raise ValueError("O Proton não confirmou a transferência completa. Suas cópias locais foram preservadas.")
+    return summary['transferredItems']
 
 
 def find_cli(explicit=None):
@@ -138,13 +162,67 @@ class ProtonCLI:
             raise ValueError("Sua CLI não anuncia a opção de pular conflitos. Atualize a CLI oficial antes de transferir; o Trama não tentará sobrescrever arquivos.")
 
     def names(self, remote):
-        return remote_names(json.loads(self.call("filesystem", "list", remote, "--json", capture=True)))
+        return set(self.entries(remote))
+
+    def entries(self, remote):
+        try:
+            payload = json.loads(self.call("filesystem", "list", remote, "--json", capture=True))
+        except (TypeError, json.JSONDecodeError):
+            raise ValueError("O Proton retornou uma listagem incompleta. Confira a conexão e atualize a CLI oficial.") from None
+        return remote_entries(payload)
 
     def upload_file(self, path, remote):
-        self.call("filesystem", "upload", str(path), remote, "--file-conflict-strategy", "skip")
+        return transfer_count(self.call("filesystem", "upload", str(path), remote,
+                                        "--file-conflict-strategy", "skip", "--json", capture=True))
 
     def download_file(self, remote_path, folder):
-        self.call("filesystem", "download", remote_path, str(folder), "--file-conflict-strategy", "skip")
+        return transfer_count(self.call("filesystem", "download", remote_path, str(folder),
+                                        "--file-conflict-strategy", "skip", "--json", capture=True))
+
+
+def verify_remote_file(cli, path, remote, entry, cache=None):
+    """Compare content, never just names, before skipping an immutable file.
+
+    Proton signs the SHA-1 claim on revisions. When that verified claim is not
+    available, compare a private download with our own SHA-256 instead. Remote
+    claims are read afresh on each pass; only local digests are cached by inode
+    and timestamps. SHA-256 still verifies every received snapshot pair.
+    """
+    path = Path(path)
+    if not safe_file(path):
+        raise ValueError("A cópia local mudou durante a transferência. Tente novamente.")
+    revision = entry.get('activeRevision') if isinstance(entry, dict) else None
+    if isinstance(revision, dict) and revision.get('ok') is True:
+        revision = revision.get('value')
+    digests = revision.get('claimedDigests') if isinstance(revision, dict) else None
+    expected = digests.get('sha1') if isinstance(digests, dict) else None
+    if (isinstance(expected, str) and re.fullmatch(r'[a-fA-F0-9]{40}', expected)
+            and digests.get('sha1Verified') is True):
+        signature = file_signature(path)
+        key = ('proton-sha1', str(path.resolve()))
+        cached = cache.get(key) if cache is not None else None
+        actual = cached[1] if cached and cached[0] == signature else file_hash(path, 'sha1')
+        if file_signature(path) != signature:
+            raise ValueError("A cópia local mudou durante a verificação. Tente novamente.")
+        if cache is not None:
+            cache[key] = (signature, actual)
+        equal = actual == expected.lower()
+        size = revision.get('claimedSize')
+        if type(size) is int:
+            equal = equal and size == signature[2]
+    else:
+        cli.verify_transfer_flags('download')
+        folder = path.parent.resolve()
+        staging = Path(tempfile.mkdtemp(prefix='.trama-proton-verificacao-', dir=folder))
+        stat = staging.stat()
+        try:
+            cli.download_file(f'{remote}/{path.name}', staging)
+            downloaded = staging / path.name
+            equal = safe_file(downloaded) and file_hash(downloaded) == file_hash(path)
+        finally:
+            _clean_automatic_staging(folder, staging, {path.name}, (stat.st_dev, stat.st_ino))
+    if not equal:
+        raise ValueError(f"A cópia {path.name} no Proton tem conteúdo diferente. Nada foi sobrescrito; confira a pasta remota antes de continuar.")
 
 
 def publish_files(cli, folder, remote, cache=None):
@@ -152,16 +230,28 @@ def publish_files(cli, folder, remote, cache=None):
     remote = remote_folder(remote)
     pairs = local_pairs(folder, cache)
     cli.verify_transfer_flags("upload")
-    existing = cli.names(remote)
+    existing = cli.entries(remote)
     count = 0
     for archive, metadata in pairs:
+        checked = {}
+        # A JSON marker must never complete a pre-existing, different ZIP.
+        for path in (archive, metadata):
+            if path.name in existing:
+                verify_remote_file(cli, path, remote, existing[path.name], cache)
+                checked[path.name] = existing[path.name]
         # ZIP first, JSON last: readers only inspect complete pairs.
         for path in (archive, metadata):
             if path.name in existing:
+                if existing[path.name] != checked.get(path.name):
+                    verify_remote_file(cli, path, remote, existing[path.name], cache)
                 continue
-            cli.upload_file(path, remote)
-            existing.add(path.name)
-            count += 1
+            transferred = cli.upload_file(path, remote)
+            # A concurrent writer can make --skip succeed without uploading.
+            existing = cli.entries(remote)
+            if path.name not in existing:
+                raise ValueError("O Proton ainda não confirmou o arquivo enviado. A cópia local permanece disponível para tentar novamente.")
+            verify_remote_file(cli, path, remote, existing[path.name], cache)
+            count += transferred
     return count
 
 
@@ -245,13 +335,16 @@ def receive_files(cli, remote, folder, cache=None, keep_staging=True):
         raise ValueError("Escolha uma pasta local de sincronização existente.")
     remote = remote_folder(remote)
     cli.verify_transfer_flags("download")
-    names = cli.names(remote)
+    entries = cli.entries(remote)
+    names = set(entries)
     ids = sorted(name[:-5] for name in names if name.endswith(".json") and name[:-5] + ".zip" in names)
     pending = []
     for snapshot_id in ids:
         metadata, archive = folder / f"{snapshot_id}.json", folder / f"{snapshot_id}.zip"
         if safe_file(metadata) and safe_file(archive):
             snapshot_pair(folder, snapshot_id, cache)
+            for path in (archive, metadata):
+                verify_remote_file(cli, path, remote, entries[path.name], cache)
         else:
             pending.append(snapshot_id)
     if not pending:
@@ -320,6 +413,8 @@ class BackgroundCLI(ProtonCLI):
         try:
             transfer = len(args) >= 2 and args[0] == "filesystem" and args[1] in ("upload", "download") and "--help" not in args
             output, error = process.communicate(timeout=self.transfer_timeout if transfer else self.command_timeout)
+            if self._stopped.is_set():
+                raise ValueError("Transferência interrompida.")
             if process.returncode:
                 # CLI diagnostics can contain account information. Never return
                 # raw stdout/stderr to the browser or logs.
@@ -329,7 +424,10 @@ class BackgroundCLI(ProtonCLI):
                 raise ValueError("Não foi possível acessar o Proton. Confira a internet e se a pasta remota existe. O Trama tentará novamente.")
             return output if capture else None
         except subprocess.TimeoutExpired:
-            process.kill()
+            try:
+                process.kill()
+            except OSError:
+                pass  # The process can exit just as its deadline expires.
             process.communicate()
             raise ValueError("O Proton demorou para responder. Suas notas continuam locais; o envio será tentado novamente.") from None
         finally:
@@ -346,7 +444,10 @@ class BackgroundCLI(ProtonCLI):
         self._stopped.set()
         with self._lock:
             if self._process is not None and self._process.poll() is None:
-                self._process.kill()
+                try:
+                    self._process.kill()
+                except OSError:
+                    pass  # It may have exited between poll and kill.
 
 
 class ProtonTransport:

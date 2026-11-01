@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import socket
 import threading
+import unicodedata
 import uuid
 
 from storage_features import MAX_VAULT_ARCHIVE, counts
@@ -74,6 +75,7 @@ class SyncStore:
         transport = payload.get("transport", defaults.get("transport", "folder"))
         remote = payload.get("remoteFolder", defaults.get("remoteFolder", "/my-files/Trama"))
         cli = payload.get("cliPath", defaults.get("cliPath"))
+        device_name = payload.get("deviceName", defaults.get("deviceName", socket.gethostname()))
         if type(automatic) is not bool or transport not in ("folder", "proton"):
             raise SyncError("Escolha sincronização manual/automática e um transporte válido.")
         if not isinstance(remote, str) or len(remote) > 1024 or not remote.startswith("/my-files/"):
@@ -83,7 +85,11 @@ class SyncStore:
             raise SyncError("Caminho remoto inválido.")
         if cli is not None and (not isinstance(cli, str) or len(cli) > 4096 or any(ord(char) < 32 for char in cli)):
             raise SyncError("Caminho do programa Proton Drive inválido.")
-        return {"automatic": automatic, "transport": transport, "remoteFolder": remote, "cliPath": cli.strip() or None if isinstance(cli, str) else None}
+        if (not isinstance(device_name, str) or not device_name.strip() or len(device_name.strip()) > 80
+                or any(unicodedata.category(char) in ("Cc", "Cs") for char in device_name)):
+            raise SyncError("Use um nome de computador entre 1 e 80 caracteres, sem caracteres de controle.")
+        return {"automatic": automatic, "transport": transport, "remoteFolder": remote,
+                "cliPath": cli.strip() or None if isinstance(cli, str) else None, "deviceName": device_name.strip()}
 
     def configuration(self):
         with self.lock:
@@ -93,10 +99,10 @@ class SyncStore:
         if self.worker is not None:
             self.worker.wake()
 
-    def _save_config(self):
+    def _save_config(self, configuration=None):
         temporary = self.store.directory / f".sync-config-{uuid.uuid4().hex}.tmp"
         try:
-            self._write_exclusive(temporary, json.dumps(self.config, ensure_ascii=False).encode("utf-8"))
+            self._write_exclusive(temporary, json.dumps(self.config if configuration is None else configuration, ensure_ascii=False).encode("utf-8"))
             os.replace(temporary, self.config_path)
         finally:
             temporary.unlink(missing_ok=True)
@@ -150,12 +156,17 @@ class SyncStore:
             if changed_destination and str(folder) == self.config.get("folder") and any(folder.iterdir()):
                 raise SyncError("Para mudar o transporte ou a pasta remota, escolha outra pasta local vazia. As cópias da conexão anterior devem permanecer separadas e não serão apagadas.", 409, "sync_connection_change")
             changed_connection = str(folder) != self.config.get("folder") or changed_destination
+            candidate = dict(self.config)
             if changed_connection:
-                self.config.update(folder=str(folder), base=None, baseFingerprint=None, mergeParents=[])
+                candidate.update(folder=str(folder), base=None, baseFingerprint=None, mergeParents=[])
+            candidate.update(options)
+            # The worker must never use a connection that the API reported as
+            # unsaved. Publish in-memory configuration only after atomic persistence.
+            self._save_config(candidate)
+            self.config = candidate
+            if changed_connection:
                 self._snapshot_cache.clear()
                 self._snapshot_errors.clear()
-            self.config.update(options)
-            self._save_config()
             self.config_error = None
             self._status_cache = None
         if self.worker is not None:
@@ -391,7 +402,18 @@ class SyncStore:
     def receive(self, payload, *, automatic=False, guard=None):
         if not isinstance(payload, dict):
             raise SyncError("Informe id e revision para receber uma versão.")
+        preview = payload.get("preview")
+        if "preview" in payload:
+            if (not isinstance(preview, dict)
+                    or any(not isinstance(preview.get(key), str) or not re.fullmatch(r"[a-f0-9]{64}", preview[key]) for key in ("fingerprint", "snapshotHash"))
+                    or not isinstance(preview.get("heads"), list) or len(preview["heads"]) > 1000
+                    or any(not isinstance(ident, str) or not ID.fullmatch(ident) for ident in preview["heads"])
+                    or len(set(preview["heads"])) != len(preview["heads"])
+                    or type(payload.get("revision")) is not int or payload["revision"] < 0):
+                raise SyncError("Comparação inválida. Compare as versões novamente antes de receber.", 400, "sync_preview_invalid")
         with self.lock:
+            if preview is not None and self.store.revision() != payload["revision"]:
+                raise SyncError("As notas mudaram desde a comparação. Compare as versões novamente antes de receber.", 409, "sync_preview_stale")
             self._revision(payload.get("revision"))
             folder = self._folder()
             metadata, archive = self._read_snapshot(folder, payload.get("id"), content=True)
@@ -400,6 +422,9 @@ class SyncStore:
             self.store.features._unpack(archive)
             state = self.status(refresh=True)
             fingerprint, revision, _ = self._fingerprint()
+            if preview is not None and (preview["fingerprint"] != fingerprint or set(preview["heads"]) != set(state["heads"])
+                                        or preview["snapshotHash"] != metadata["sha256"] or revision != payload["revision"]):
+                raise SyncError("As notas ou as cópias da pasta mudaram desde a comparação. Compare as versões novamente antes de receber.", 409, "sync_preview_stale")
             recovery = None
             if fingerprint != self.config.get("baseFingerprint"):
                 recovery = self._preserve_local(fingerprint, revision)

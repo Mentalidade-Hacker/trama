@@ -50,6 +50,14 @@ class ProtonAutoTests(unittest.TestCase):
             cli.names('/my-files/Trama')
         launch.assert_not_called()
 
+    def test_shutdown_tolerates_process_exit_between_poll_and_kill(self):
+        cli = BackgroundCLI('proton-drive')
+        cli._process = MagicMock()
+        cli._process.poll.return_value = None
+        cli._process.kill.side_effect = ProcessLookupError('already exited')
+        cli.close()
+        self.assertTrue(cli._stopped.is_set())
+
     def test_automatic_transfer_refuses_plaintext_credential_setting(self):
         with patch.dict(os.environ, {'PROTON_DRIVE_CREDENTIALS_STORE': 'unsafe_file'}):
             with patch('proton_transfer.subprocess.Popen') as launch, self.assertRaises(ValueError):
@@ -125,7 +133,7 @@ class ProtonAutoTests(unittest.TestCase):
 
     def test_transfers_allow_ten_minutes_but_help_and_listing_remain_bounded(self):
         process = MagicMock(returncode=0)
-        process.communicate.return_value = ('[]', '')
+        process.communicate.return_value = ('{"transferredItems":1,"skippedItems":0,"failedItems":0}', '')
         with patch('proton_transfer.subprocess.Popen', return_value=process):
             cli = BackgroundCLI('proton-drive')
             cli.upload_file(Path('snapshot.zip'), '/my-files/Trama')
@@ -134,6 +142,7 @@ class ProtonAutoTests(unittest.TestCase):
             process.communicate.assert_called_with(timeout=600)
             cli.call('filesystem', 'download', '--help', capture=True)
             process.communicate.assert_called_with(timeout=60)
+            process.communicate.return_value = ('[]', '')
             cli.names('/my-files/Trama')
             process.communicate.assert_called_with(timeout=60)
 

@@ -138,6 +138,146 @@ class AutoSyncTests(unittest.TestCase):
         self.assertFalse(state["automatic"])
         self.assertEqual(state["remoteFolder"], "/my-files/Trama")
 
+    def test_idle_checks_do_not_claim_new_publication_or_transfer(self):
+        self.configure(self.a)
+        self.save(self.a, "local note")
+        worker = AutoSync(self.a, debounce=0)
+        config = self.a.sync.configuration()
+        first, second = "2026-11-01T01:00:00+00:00", "2026-11-01T02:00:00+00:00"
+        with patch("auto_sync.stamp", return_value=first):
+            worker._cycle(config)
+        self.assertEqual(worker.status()["lastPublished"], first)
+        with patch("auto_sync.stamp", return_value=second):
+            worker._cycle(config)
+        status = worker.status()
+        self.assertEqual(status["lastCheck"], second)
+        self.assertEqual(status["lastPublished"], first)
+        self.assertEqual(status["lastSuccess"], first)
+        self.assertIsNone(status["lastUpload"])
+        self.assertIsNone(status["lastDownload"])
+
+    def test_manual_check_never_instantiates_proton_or_changes_notes(self):
+        self.a.sync.configure({"folder": str(self.folder), "transport": "proton", "automatic": False})
+        self.save(self.a, "local only")
+        before = self.a.read()
+        def forbidden(config):
+            raise AssertionError("manual checking must not contact Proton")
+        worker = self.worker(self.a, forbidden)
+        self.eventually(lambda: worker.status()["state"] == "disabled")
+        worker.request_check()
+        self.eventually(lambda: worker.status()["lastCheck"] is not None)
+        self.assertEqual(worker.status()["state"], "disabled")
+        self.assertIsNone(worker.status()["lastSuccess"])
+        self.assertEqual(self.a.read(), before)
+        self.assertEqual(list(self.folder.iterdir()), [])
+        self.assertFalse(self.a.sync.config["automatic"])
+
+    def test_manual_check_error_remains_visible_until_successful_explicit_retry(self):
+        self.a.sync.configure({"folder": str(self.folder), "automatic": False})
+        worker = self.worker(self.a)
+        self.eventually(lambda: worker.status()["state"] == "disabled")
+        offline = self.root / "offline-exchange"
+        self.folder.rename(offline)
+        worker.request_check()
+        self.eventually(lambda: worker.status()["state"] == "error")
+        self.assertIsNone(worker.status()["lastCheck"])
+        self.assertEqual(worker.status()["errorCode"], "sync_folder_unavailable")
+        self.assertIn("Solicite uma nova verificação", worker.status()["message"])
+        time.sleep(.12)
+        self.assertEqual(worker.status()["state"], "error")
+        offline.rename(self.folder)
+        worker.request_check()
+        self.eventually(lambda: worker.status()["lastCheck"] is not None)
+        self.assertEqual(worker.status()["state"], "disabled")
+        self.assertIsNone(worker.status()["lastError"])
+
+    def test_request_during_a_transfer_queues_one_immediate_followup_check(self):
+        started, released = threading.Event(), threading.Event()
+        calls = []
+        class SlowTransport:
+            def download(self, folder, config):
+                calls.append("download")
+                started.set()
+                released.wait(3)
+                return 0
+            def upload(self, folder, config):
+                return 0
+            def close(self):
+                released.set()
+        self.configure(self.a, transport="proton")
+        worker = self.worker(self.a, lambda config: SlowTransport(), proton_interval=30)
+        self.assertTrue(started.wait(2))
+        start = time.monotonic()
+        worker.request_check(); worker.request_check()
+        self.assertLess(time.monotonic() - start, .1)
+        self.assertTrue(worker.status()["checkPending"])
+        self.assertEqual(calls, ["download"])
+        released.set()
+        self.eventually(lambda: len(calls) == 2 and not worker.status()["busy"])
+        self.assertFalse(worker.status()["checkPending"])
+        self.assertIsNotNone(worker.status()["lastCheck"])
+        self.assertIsNone(worker.status()["lastDownload"])
+        self.assertIsNone(worker.status()["lastSuccess"])
+
+    def test_offline_backoff_ignores_heartbeats_and_explicit_check_retries_now(self):
+        calls, clock = [], [100.0]
+        class OfflineTransport:
+            def download(self, folder, config):
+                calls.append("download")
+                raise OSError("offline")
+            def upload(self, folder, config):
+                raise AssertionError("empty graph must not upload")
+            def close(self):
+                pass
+        self.configure(self.a, transport="proton")
+        worker = AutoSync(self.a, lambda config: OfflineTransport(), proton_interval=10)
+        config = self.a.sync.configuration()
+        with patch("auto_sync.time.monotonic", side_effect=lambda: clock[0]):
+            worker._cycle(config)
+            self.assertEqual(worker._retry_at, 110)
+            self.assertEqual(worker.status()["errorCode"], "sync_transport")
+            self.assertIsNotNone(worker.status()["nextRetry"])
+            clock[0] = 101
+            worker.activity({"client": "typing", "busy": True})
+            worker._cycle(config)
+            self.assertEqual(len(calls), 1)
+            clock[0] = 110
+            worker._cycle(config)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(worker._retry_at, 130)
+            clock[0] = 111
+            worker._cycle(config, force_check=True)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(worker._retry_at, 121)
+
+    def test_proton_transfer_timestamps_require_a_positive_confirmed_count(self):
+        class CountedTransport:
+            downloads, uploads = 0, 0
+            def download(self, folder, config):
+                return self.downloads
+            def upload(self, folder, config):
+                return self.uploads
+            def close(self):
+                pass
+        transport = CountedTransport()
+        self.configure(self.a, transport="proton")
+        self.save(self.a, "publish locally")
+        worker = AutoSync(self.a, lambda config: transport, debounce=0)
+        config = self.a.sync.configuration()
+        worker._cycle(config)
+        self.assertIsNotNone(worker.status()["lastPublished"])
+        self.assertIsNone(worker.status()["lastUpload"])
+        self.assertIsNone(worker.status()["lastDownload"])
+        transport.downloads, transport.uploads = 1, 2
+        worker._cycle(config, force_check=True)
+        uploaded, downloaded = worker.status()["lastUpload"], worker.status()["lastDownload"]
+        self.assertIsNotNone(uploaded)
+        self.assertIsNotNone(downloaded)
+        transport.downloads = transport.uploads = 0
+        worker._cycle(config, force_check=True)
+        self.assertEqual(worker.status()["lastUpload"], uploaded)
+        self.assertEqual(worker.status()["lastDownload"], downloaded)
+
     def test_first_connection_with_existing_notes_requires_an_explicit_choice(self):
         self.configure(self.a)
         self.save(self.a, "remote")

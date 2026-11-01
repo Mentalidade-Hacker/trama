@@ -1,12 +1,12 @@
 # Trama em mais de um computador com Proton Drive
 
-O Trama 0.7 pode enviar e receber notas e anexos automaticamente, enquanto estiver aberto nos computadores. Ative a opção uma vez em cada máquina; depois, novas versões seguras chegam sem clicar em Publicar/Receber, e o navegador atualiza as notas quando não há edição pendente.
+O Trama 0.8 pode enviar e receber notas e anexos automaticamente, enquanto estiver aberto nos computadores. Ative a opção uma vez em cada máquina; depois, novas versões seguras chegam sem clicar em Publicar/Receber, e o navegador atualiza as notas quando não há edição pendente.
 
 O mecanismo usa cópias completas em uma pasta separada do banco. Verifica mudanças periodicamente (aproximadamente 3 segundos para pasta, 10 segundos para Proton direto, além do tempo de transferência). Não oferece edição simultânea letra a letra: alterações concorrentes pausam o recebimento e pedem revisão. Sem internet, as notas ficam locais até a conexão voltar. Um link público do Proton não hospeda o Trama.
 
 ## Ativar uma vez e usar automaticamente
 
-1. Instale o Trama 0.7 ou mais recente nas duas máquinas e entre na mesma conta Proton.
+1. Instale o Trama 0.8 ou mais recente nas duas máquinas e entre na mesma conta Proton.
 2. Crie uma pasta dedicada para as cópias. No Windows, pode ser uma subpasta de **My files** dentro do Proton Drive; mantenha-a disponível neste dispositivo. Para Proton direto, use uma pasta local vazia como `Trama-Sync` e crie a pasta `Trama` na raiz do Drive pelo site.
 3. Abra **Sincronização** no Trama e informe a pasta local. Escolha **Pasta já sincronizada** se o aplicativo Proton transfere essa pasta; escolha **Proton direto** para usar a CLI oficial no Arch ou no Windows.
 4. Para Proton direto, instale a CLI conforme abaixo, informe o executável caso não esteja no PATH e clique **Entrar no Proton**. Conclua o login no navegador oficial. Use a mesma pasta remota, por exemplo `/my-files/Trama`, nas duas máquinas.
@@ -14,7 +14,18 @@ O mecanismo usa cópias completas em uma pasta separada do banco. Verifica mudan
 
 O indicador de sincronização informa atividade, falhas e conflitos. Em modo pasta, o Trama confirma apenas a troca local; confira o estado da nuvem no aplicativo Proton. Em modo direto, o Trama executa o transporte e informa falhas. Fechar o servidor Trama interrompe esse serviço. As notas já recebidas continuam no disco.
 
-Se aparecer **conflito**, mantenha as cópias dos dois computadores e revise a escolha. O Trama não escolhe a versão mais recente pela data nem mescla textos divergentes automaticamente. **Receber esta versão** substitui o conteúdo atual, preservando backup e alterações não publicadas. A pasta de versões não é limpa automaticamente e pode crescer, sobretudo com anexos.
+Se aparecer **conflito**, mantenha as cópias dos dois computadores e revise a escolha. O Trama não escolhe a versão mais recente pela data nem mescla textos divergentes automaticamente. **Comparar e escolher** mostra páginas, blocos e amostras do texto que mudariam. **Preservar cópia local e receber** substitui o grafo após essa comparação, preservando backup e alterações não publicadas. Se as notas, anexos ou versões disponíveis mudarem durante a comparação, será necessário comparar novamente. A pasta de versões não é limpa automaticamente e pode crescer, sobretudo com anexos.
+
+## Entender o estado e retomar uma transferência
+
+- **Verificar agora** antecipa a próxima checagem automática. Em modo manual, apenas relê a pasta; não envia, recebe nem liga o automático.
+- **Última verificação** significa que a pasta ou o Proton foi consultado. Os horários de publicação local, envio, download e aplicação são apresentados separadamente, quando esses eventos realmente ocorrerem.
+- Uma falha mantém as notas locais e aumenta progressivamente o intervalo de novas tentativas. **Verificar agora** permite tentar antes; não precisa alterar a conexão.
+- Se o servidor local parar, o painel deixa de afirmar que a sincronização está ativa. Inicie o Trama e mantenha a janela com alterações pendentes aberta.
+- Em **Ajustar conexão e modo automático**, dê um nome claro ao computador, como “Notebook” ou “Computador de casa”. Esse nome identificará novas cópias publicadas.
+- **Baixar cópia desta janela** permite exportar o grafo visível, inclusive alterações ainda não salvas. Esse JSON não inclui os arquivos anexos; o ZIP de grafo completo continua disponível em Dados e backups.
+
+O transporte direto não confia apenas no nome ou no tamanho dos arquivos remotos. Ele compara os conteúdos e confere se o upload chegou antes de confirmar o envio. Sem digest de revisão verificável na CLI, pode baixar o arquivo para comparação, o que consome banda adicional. Se um mesmo nome remoto tiver conteúdo diferente, o Trama interrompe a transferência e preserva as cópias em vez de sobrescrever.
 
 ## Escolha como transportar os arquivos
 

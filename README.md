@@ -1,16 +1,16 @@
-# Trama 0.7
+# Trama 0.8
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.7 acrescenta **sincronização automática opcional** e atualização das notas na tela do outro computador, além de correções nos links e na importação Markdown. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.8 melhora a **sincronização automática opcional** com comparação de versões antes de resolver conflitos, retomada de falhas e indicação separada de verificação, envio e recebimento. O tamanho das letras pode ser ajustado de 80% a 200%. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
-Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Confira o número da versão publicada: a sincronização automática requer **0.7 ou mais recente nos dois computadores**.
+Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Recomenda-se usar a **0.8 nos dois computadores** para obter as melhorias de conferência e comparação. O formato das cópias continua compatível com a 0.7.
 
-- [Trama 0.7 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.7/trama-v0.7-windows-linux.zip).
-- [Trama 0.7 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.7/trama-v0.7-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.7](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.7/trama-v0.7-SHA256.txt).
+- [Trama 0.8 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.8/trama-v0.8-windows-linux.zip).
+- [Trama 0.8 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.8/trama-v0.8-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.8](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.8/trama-v0.8-SHA256.txt).
 
 Extraia o pacote. Com **Python 3.10 ou mais recente** e um navegador atual, abra `start.cmd` no Windows ou execute `bash start.sh` no Arch Linux. Os detalhes estão nas seções abaixo. Os pacotes contêm código-fonte e lançadores, não um executável independente do Python.
 

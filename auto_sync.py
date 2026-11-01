@@ -6,6 +6,7 @@ receiving; optimistic revisions and the shared store lock protect saved edits.
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
 import threading
 import time
 
@@ -30,12 +31,18 @@ class AutoSync:
         self._transport = None
         self._connection_key = None
         self._next_download = self._next_upload = 0.0
+        self._retry_at = 0.0
+        self._failures = 0
+        self._check_requested = False
         self._transport_error = None
         self._remote_ok = False
         self._seen_fingerprint = None
         self._changed_at = 0.0
         self._state = {"state": "disabled", "message": "Sincronização automática desativada.",
-                       "busy": False, "lastSuccess": None, "lastAttempt": None}
+                       "busy": False, "lastSuccess": None, "lastAttempt": None,
+                       "lastCheck": None, "lastUpload": None, "lastDownload": None,
+                       "lastPublished": None, "lastReceived": None,
+                       "nextRetry": None, "lastError": None, "errorCode": None}
         self.sync.worker = self
 
     @staticmethod
@@ -55,6 +62,7 @@ class AutoSync:
     def status(self):
         with self._lock:
             state = dict(self._state)
+            state["checkPending"] = self._check_requested
         state["clientsBusy"] = self._clients_busy()
         state["running"] = bool(self._thread and self._thread.is_alive() and not self._stop.is_set())
         return state
@@ -86,6 +94,13 @@ class AutoSync:
     def wake(self):
         self._wake.set()
 
+    def request_check(self):
+        """Queue one immediate check; never perform network work in the caller."""
+        with self._lock:
+            self._check_requested = True
+        self.wake()
+        return self.status()
+
     @staticmethod
     def _dispose_transport(transport):
         if transport is not None:
@@ -112,6 +127,9 @@ class AutoSync:
                 transport, self._transport = self._transport, None
                 self._connection_key = None
         self._dispose_transport(transport)
+        if not config.get("automatic"):
+            self._update(state="disabled", message="Sincronização automática desativada.", busy=False,
+                         nextRetry=None, lastError=None, errorCode=None)
         self.wake()
 
     def stop(self):
@@ -153,7 +171,7 @@ class AutoSync:
                 return None
         return transport
 
-    def _cycle(self, config):
+    def _cycle(self, config, force_check=False):
         key = self._connection(config)
         if key != self._connection_key:
             self._close_transport()
@@ -162,19 +180,32 @@ class AutoSync:
             self._remote_ok = config.get("transport") == "folder"
             self._transport_error = None
             self._seen_fingerprint = None
+            self._retry_at, self._failures = 0.0, 0
+            self._update(lastSuccess=None, lastCheck=None, lastUpload=None, lastDownload=None,
+                         lastPublished=None, lastReceived=None, nextRetry=None, lastError=None, errorCode=None)
+        if force_check:
+            self._next_download = self._next_upload = self._retry_at = 0.0
+            self._failures = 0
         self._update(state="checking", message="Verificando novas versões.", busy=True, lastAttempt=stamp())
         proton = config.get("transport") == "proton"
-        transport = None
-        network_tick = proton and time.monotonic() >= self._next_download
-        if proton:
+        transport, cycle_error = None, None
+        network_allowed = time.monotonic() >= self._retry_at
+        network_tick = proton and network_allowed and time.monotonic() >= self._next_download
+        attempted_network = False
+        events = {}
+        if proton and network_allowed:
             try:
+                attempted_network = self._transport is None or network_tick
                 transport = self._get_transport(config)
                 if transport is not None and network_tick:
                     self._update(message="Verificando cópias no Proton Drive.")
-                    transport.download(config["folder"], dict(config))
-                    self._remote_ok, self._transport_error = True, None
+                    downloaded = transport.download(config["folder"], dict(config))
+                    self._remote_ok = True
+                    events["lastCheck"] = stamp()
+                    if type(downloaded) is int and downloaded > 0:
+                        events["lastDownload"] = stamp()
             except Exception as error:
-                self._remote_ok, self._transport_error = False, str(error)
+                self._remote_ok, cycle_error = False, str(error)
             finally:
                 if network_tick:
                     self._next_download = time.monotonic() + self.proton_interval
@@ -187,22 +218,45 @@ class AutoSync:
         # Local branches are uploaded even when reconciliation reports conflict.
         # This makes offline edits recoverable without selecting a remote winner.
         may_upload = result["state"] != "choice_required" and (self.sync.config.get("base") is not None or result.get("published"))
-        if proton and transport is not None and may_upload and (result.get("published") or network_tick or time.monotonic() >= self._next_upload):
+        if proton and network_allowed and transport is not None and may_upload and (result.get("published") or network_tick or time.monotonic() >= self._next_upload):
             try:
+                attempted_network = True
                 self._update(state="publishing", message="Enviando cópias preservadas para o Proton Drive.")
-                transport.upload(config["folder"], dict(config))
+                uploaded = transport.upload(config["folder"], dict(config))
+                if type(uploaded) is int and uploaded > 0:
+                    events["lastUpload"] = stamp()
             except Exception as error:
-                self._transport_error = str(error)
+                cycle_error = str(error)
             finally:
                 self._next_upload = time.monotonic() + self.proton_interval
         if not self._active(config):
             return
+        if cycle_error is not None:
+            self._transport_error = cycle_error
+            self._failures += 1
+            retry_delay = min(120.0, self.proton_interval * 2 ** min(self._failures - 1, 8))
+            self._retry_at = time.monotonic() + retry_delay
+            self._next_download = self._next_upload = self._retry_at
+            events["nextRetry"] = (datetime.now(timezone.utc) + timedelta(seconds=retry_delay)).isoformat()
+        elif attempted_network:
+            self._transport_error = None
+            self._retry_at, self._failures = 0.0, 0
+            events["nextRetry"] = None
+        if not proton:
+            events["lastCheck"] = stamp()
+        if result.get("published"):
+            events["lastPublished"] = stamp()
+        if result.get("received"):
+            events["lastReceived"] = stamp()
         changes = {"state": result["state"], "message": result["message"], "busy": False}
         if self._transport_error:
-            changes.update(state="error", message=f"Não foi possível completar a transferência. As notas e cópias locais estão preservadas. Nova tentativa automática: {self._transport_error}")
-        elif result["state"] == "idle" or result.get("published") or result.get("received"):
+            changes.update(state="error", errorCode="sync_transport", lastError=self._transport_error,
+                           message=f"Não foi possível completar a transferência. As notas e cópias locais estão preservadas. Nova tentativa automática: {self._transport_error}")
+        else:
+            changes.update(lastError=None, errorCode=None)
+        if any(key in events for key in ("lastUpload", "lastDownload", "lastPublished", "lastReceived")):
             changes["lastSuccess"] = stamp()
-        self._update(**changes)
+        self._update(**changes, **events)
 
     def _run(self):
         while not self._stop.is_set():
@@ -210,13 +264,26 @@ class AutoSync:
             delay = self.folder_interval
             try:
                 config = self.sync.configuration()
+                with self._lock:
+                    check_requested, self._check_requested = self._check_requested, False
                 if not config.get("automatic") or not config.get("folder"):
                     self._close_transport()
                     self._connection_key = None
-                    self._update(state="disabled", message="Sincronização automática desativada.", busy=False)
+                    if check_requested:
+                        self._update(state="checking", message="Verificando a pasta local, sem transferir notas.", busy=True, lastAttempt=stamp())
+                        if config.get("folder"):
+                            with self.sync.lock:
+                                self.sync._folder()
+                                self.sync.status(refresh=True)
+                            self._update(lastCheck=stamp())
+                    if check_requested or self.status()["state"] != "error":
+                        self._update(state="disabled", message="Sincronização automática desativada.", busy=False,
+                                     nextRetry=None, lastError=None, errorCode=None)
                 else:
                     delay = self.proton_interval if config.get("transport") == "proton" else self.folder_interval
-                    self._cycle(config)
+                    self._cycle(config, force_check=check_requested)
+                    if self._retry_at > time.monotonic():
+                        delay = max(delay, self._retry_at - time.monotonic())
                     # A just-saved graph should not wait for the next network poll.
                     remaining = self.debounce - (time.monotonic() - self._changed_at)
                     if self._seen_fingerprint is not None and remaining > 0:
@@ -226,7 +293,9 @@ class AutoSync:
             except Exception as error:
                 if not self._stop.is_set():
                     state = "waiting" if isinstance(error, SyncError) and error.code in ("sync_changed", "sync_editing") else "error"
-                    self._update(state=state, message=f"As notas locais foram preservadas. A sincronização tentará novamente: {error}", busy=False)
+                    retry = "A sincronização tentará novamente" if self.sync.config.get("automatic") else "Solicite uma nova verificação para tentar novamente"
+                    self._update(state=state, message=f"As notas locais foram preservadas. {retry}: {error}", busy=False,
+                                 lastError=str(error), errorCode=getattr(error, "code", "sync_error"))
             if not self._stop.is_set():
                 self._wake.wait(timeout=delay)
         self._update(state="stopped", message="Sincronização automática encerrada.", busy=False)

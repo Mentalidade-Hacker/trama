@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSyncClient} from '../web/sync-client.js';
-import {safeProtonLoginURL,syncPresentation} from '../web/sync-ui.js';
+import {createSyncClient,bindSyncActivity} from '../web/sync-client.js';
+import {safeProtonLoginURL,syncPresentation,syncComparisonHTML,syncReceiveRequest} from '../web/sync-ui.js';
 
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
 function fixture(overrides={}) {
@@ -67,9 +67,79 @@ test('login links accept only the exact official HTTPS account hosts',()=>{
 });
 test('sync labels distinguish manual operation, initial choice and active automation',()=>{
   assert.equal(syncPresentation({configured:false}).label,'Conectar outro computador');
-  assert.equal(syncPresentation({configured:true,automatic:false}).label,'Sincronização manual');
+  assert.equal(syncPresentation({configured:true,automatic:false}).label,'Modo manual');
   assert.equal(syncPresentation({configured:true,automatic:true,auto:{state:'choice_required'}}).label,'Escolha a versão inicial');
-  assert.equal(syncPresentation({configured:true,automatic:true,transport:'proton',auto:{state:'idle'}}).label,'Sincronização automática ativa');
+  assert.equal(syncPresentation({configured:true,automatic:true,transport:'proton',auto:{state:'idle'}}).label,'Última verificação do Proton concluída');
   assert.equal(syncPresentation({configured:true,automatic:true,transport:'folder',auto:{state:'idle'}}).label,'Pasta local atualizada');
   assert.match(syncPresentation({configured:true,automatic:true,transport:'folder',auto:{state:'idle'}}).message,/nuvem depende/);
+});
+
+test('explicit holds renew edit leases and prevent refresh after the idle delay',async()=>{
+  const f=fixture();f.client.hold('comparison');f.advance(10000);
+  assert.equal(await f.client.poll(),false);assert.equal(f.leases.at(-1).busy,true);
+  f.client.release('comparison');assert.equal(await f.client.poll(),false);
+  f.advance(1600);assert.equal(await f.client.poll(),true);
+});
+
+test('a hold started during state download invalidates that pending result',async()=>{
+  const incoming=deferred(),started=deferred();const f=fixture({fetchState:()=>{started.resolve();return incoming.promise;}});
+  const polling=f.client.poll();await started.promise;f.client.hold('preview');incoming.resolve({revision:2});
+  assert.equal(await polling,false);assert.equal(f.applied.length,0);
+});
+
+test('composition is protected until it ends or the editor loses focus, including long pauses',async()=>{
+  for(const finish of ['compositionend','focusout']){
+    const f=fixture(),listeners=new Map(),field={isConnected:true,matches:()=>true};
+    const root={addEventListener:(type,fn)=>listeners.set(type,fn),removeEventListener:type=>listeners.delete(type)};
+    const detach=bindSyncActivity(f.client,root);
+    listeners.get('compositionstart')({target:field});f.advance(9000);
+    assert.equal(await f.client.poll(),false,finish);
+    listeners.get(finish)({target:field});f.advance(1600);
+    assert.equal(await f.client.poll(),true,finish);detach();assert.equal(listeners.size,0);
+  }
+});
+
+test('removing a composing element does not leave a permanent receive hold',async()=>{
+  const f=fixture(),field={isConnected:true};f.client.hold(field);f.advance(9000);
+  assert.equal(await f.client.poll(),false);field.isConnected=false;assert.equal(await f.client.poll(),true);
+});
+
+test('status does not leave a stale success label when the local server is unavailable',()=>{
+  const status={configured:true,transport:'proton',automatic:true,auto:{state:'idle'}};
+  const presentation=syncPresentation(status,{},'Connection failed');
+  assert.equal(presentation.state,'unavailable');assert.match(presentation.label,/indisponível/);
+  assert.doesNotMatch(presentation.label,/concluída|ativa/);
+  assert.equal(syncPresentation(status,{dirty:true}).state,'saving');
+  assert.equal(syncPresentation({...status,localChanges:true}).state,'pending');
+  assert.equal(syncPresentation(status,{conflict:true}).state,'local-conflict');
+});
+
+test('manual divergence and incomplete files remain actionable even when automation is disabled',()=>{
+  const status={configured:true,automatic:false,auto:{state:'disabled'}};
+  assert.equal(syncPresentation({...status,conflict:true}).state,'conflict');
+  assert.equal(syncPresentation({...status,incomplete:1}).state,'incomplete');
+  assert.equal(syncPresentation({...status,conflict:true,pendingMerge:true}).state,'pending');
+  assert.match(syncPresentation({...status,conflict:true,pendingMerge:true}).message,/Publique uma nova cópia/);
+  const automaticChoice=syncPresentation({...status,automatic:true,conflict:true,pendingMerge:true});
+  assert.match(automaticChoice.message,/será publicada automaticamente na próxima verificação/);
+  assert.doesNotMatch(automaticChoice.message,/Publique/);
+  assert.match(syncPresentation(status).message,/apenas confere a pasta local/);
+});
+
+test('comparison escapes remote metadata and text and calls out unsafe attachment replacement',()=>{
+  const attack='<img src=x onerror=alert(1)>',preview={safeToReceive:false,snapshot:{deviceName:attack,created:'bad',pages:attack,blocks:2},local:{pages:1,blocks:1},changes:{addedPages:1,removedPages:2,changedPages:3,addedBlocks:4,removedBlocks:5,changedBlocks:6},attachments:{added:0,changed:1,keptLocal:2},pages:[{title:attack,kind:'removed',removedBlocks:5}],blockChanges:[{page:attack,kind:'changed',before:attack,after:'<script>bad()</script>'}],blocksTruncated:true};
+  const html=syncComparisonHTML(preview);
+  assert.doesNotMatch(html,/<img|<script|<[^>]+onerror=/);
+  assert.match(html,/&lt;img/);assert.match(html,/não pode ser recebida/);assert.match(html,/Amostra limitada/);
+  assert.match(html,/2<\/strong><span>páginas removidas/);assert.match(html,/data indisponível/);
+});
+
+test('receive always carries the reviewed snapshot token and refuses changed or incomplete previews',()=>{
+  const preview={id:'copy-1',revision:4,safeToReceive:true,preview:{fingerprint:'local-hash',snapshotHash:'archive-hash',heads:['copy-1']}};
+  assert.deepEqual(syncReceiveRequest('copy-1',preview,{},4),{id:'copy-1',revision:4,preview:preview.preview});
+  for(const state of [{dirty:true},{saving:true},{conflict:true},{ready:false}])assert.throws(()=>syncReceiveRequest('copy-1',preview,state,4),/mudaram/);
+  assert.throws(()=>syncReceiveRequest('copy-1',preview,{},5),/mudaram/);
+  assert.throws(()=>syncReceiveRequest('copy-2',preview,{},4),/validada/);
+  assert.throws(()=>syncReceiveRequest('copy-1',{...preview,preview:undefined},{},4),/validada/);
+  assert.throws(()=>syncReceiveRequest('copy-1',{...preview,safeToReceive:false},{},4),/anexos/);
 });

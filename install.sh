@@ -7,7 +7,7 @@ APP_DIR="$DATA_ROOT/trama/app"
 BIN_DIR="$HOME/.local/bin"
 mkdir -p "$APP_DIR/web" "$DATA_ROOT/applications" "$BIN_DIR"
 if [[ "$(cd -- "$APP_DIR" && pwd -P)" != "$SOURCE_DIR" ]]; then
-  cp -- "$SOURCE_DIR/server.py" "$SOURCE_DIR/proofreader.py" "$SOURCE_DIR/storage_features.py" "$SOURCE_DIR/sync_store.py" "$SOURCE_DIR/auto_sync.py" "$SOURCE_DIR/proton_service.py" "$SOURCE_DIR/start.sh" "$SOURCE_DIR/install.sh" "$APP_DIR/"
+  cp -- "$SOURCE_DIR/server.py" "$SOURCE_DIR/proofreader.py" "$SOURCE_DIR/storage_features.py" "$SOURCE_DIR/sync_store.py" "$SOURCE_DIR/auto_sync.py" "$SOURCE_DIR/sync_preview.py" "$SOURCE_DIR/proton_service.py" "$SOURCE_DIR/start.sh" "$SOURCE_DIR/install.sh" "$APP_DIR/"
   cp -R -- "$SOURCE_DIR/web/." "$APP_DIR/web/"
   if [[ -d "$SOURCE_DIR/resources" ]]; then mkdir -p "$APP_DIR/resources"; cp -R -- "$SOURCE_DIR/resources/." "$APP_DIR/resources/"; fi
   cp -- "$SOURCE_DIR/dictionary.py" "$SOURCE_DIR/build_dictionary.py" "$SOURCE_DIR/DICTIONARY.md" "$APP_DIR/"

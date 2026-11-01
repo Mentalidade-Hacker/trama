@@ -1,4 +1,4 @@
-# Cobertura funcional — Trama 0.7
+# Cobertura funcional — Trama 0.8
 
 Este documento descreve os arquivos entregues. **Completo no escopo** indica que o fluxo local descrito está implementado, sem afirmar equivalência integral com o Roam. **Parcial** lista diferenças. **Ausente** significa não incluído. Não há porcentagem de paridade.
 
@@ -82,6 +82,10 @@ Os componentes e consultas usam blocos reais do grafo local. A tabela descreve o
 
 ## Verificação
 
-Há testes para modelo, consultas, metadados, templates, componentes, proteção do corretor, conflitos, histórico, anexos, ZIP, rollback, dois computadores simulados e proteção de sintaxe na tradução. Os novos testes de ligações/renomeação verificam código, URLs, aliases e fórmulas; os testes Markdown verificam blocos multilinha, cercas de código incompletas e referências entre páginas. A versão 0.6 passou também na verificação automatizada do GitHub em Windows e Ubuntu. A tradução real PT↔EN, os dicionários ortográficos reais e o LanguageTool real foram verificados no Windows. Respostas controladas do corretor validam aplicação de sugestões, não qualidade linguística.
+Há testes para modelo, consultas, metadados, templates, componentes, proteção do corretor, conflitos, histórico, anexos, ZIP, rollback, dois computadores simulados e proteção de sintaxe na tradução. Os novos testes de ligações/renomeação verificam código, URLs, aliases e fórmulas; os testes Markdown verificam blocos multilinha, cercas de código incompletas e referências entre páginas. A versão 0.7 passou também na verificação automatizada do GitHub em Windows e Ubuntu. A tradução real PT↔EN, os dicionários ortográficos reais e o LanguageTool real foram verificados no Windows. Respostas controladas do corretor validam aplicação de sugestões, não qualidade linguística.
 
 Arch Linux, instaladores nativos, transferência real com conta Proton não foram executados diretamente neste ambiente. Veja [README.md](README.md) e [PROTON-DRIVE.md](PROTON-DRIVE.md). Esta tabela descreve o escopo entregue, sem transformar planos em recursos disponíveis.
+
+## Melhorias da sincronização na 0.8
+
+Comparação somente de leitura com contagens e amostras, confirmação vinculada à versão comparada, tentativas com espera progressiva, nome do computador, horários de eventos separados, detecção de servidor indisponível e proteção durante composição de texto. O transporte Proton verifica conteúdo remoto antes de ignorar arquivos existentes e confirma uploads. Modo manual não realiza rede ao verificar a pasta. Testes com conta Proton real permanecem pendentes.

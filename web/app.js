@@ -4,7 +4,7 @@ import {renderComponent,bindComponents,renderMath} from './components.js';
 import {setupFeatures,commands} from './features.js';
 import {parseOutline,markdownPages} from './outline.js';
 import {setupSync} from './sync-ui.js';
-import {createSyncClient} from './sync-client.js';
+import {createSyncClient,bindSyncActivity} from './sync-client.js';
 import {setupTranslation} from './translation-ui.js';
 import {setupLiveWriting} from './live-writing.js';
 import {setupDictionary} from './dictionary-ui.js';
@@ -398,6 +398,7 @@ async function init() {
   catch(e){status('Falha ao abrir',true);$('#main').innerHTML=`<h1>Não foi possível abrir o grafo</h1><p>${esc(e.message)}</p><p>Inicie o Trama com <code>start.cmd</code> no Windows ou <code>bash start.sh</code> no Linux e abra o endereço exibido.</p>`;}
 }
 const featureContext={get data(){return data;},get page(){return pageById(current);},get editing(){return editing;},get revision(){return revision;},finishEditing(){editing=null;},checkpoint,changed,render,edit,toast,modal,openPage,download,flush,backup,
+  localState,syncHold:key=>liveSync?.hold(key),syncRelease:key=>liveSync?.release(key),
   language:()=>proofLanguage,setLanguage:language=>{proofLanguage=language;try{localStorage.setItem('trama-proof-language',language);}catch{}document.querySelectorAll('.block-editor').forEach(el=>el.lang=language);},
   replaceData:async state=>{checkpoint();data=C.importData(state);current=data.pages[0]?.id;rightStack=[];right=null;editing=null;zoom=null;view=current?'page':'pages';changed();render();if(!await flush())throw Error('Não foi possível salvar a restauração.');history.replaceState(null,'',current?'#p/'+current:'#pages');},
   syncConfigured:state=>{const next=!!state.automatic;if(next!==automaticSync){automaticSync=next;if(ready&&!data.pages.length&&view==='page')render();}},
@@ -405,7 +406,7 @@ const featureContext={get data(){return data;},get page(){return pageById(curren
 };
 F=setupFeatures(featureContext);
 liveSync=createSyncClient({getState:localState,fetchRevision:()=>syncRequest('/api/revision'),fetchState:()=>syncRequest('/api/state'),applyRemote:applyRemoteState,sendActivity:body=>syncRequest('/api/sync/activity',body),onRefresh:()=>void syncUI?.refresh()});
-for(const event of ['input','change','focusin'])document.addEventListener(event,e=>{if(e.target.matches?.('input,textarea,select,[contenteditable="true"]'))liveSync.touch();},true);
+bindSyncActivity(liveSync,document);
 window.addEventListener('focus',()=>{liveSync.activity();void liveSync.poll();});
 window.addEventListener('pagehide',()=>{liveSync.stop();syncUI?.stop();});
 window.addEventListener('pageshow',e=>{if(e.persisted){liveSync.start();syncUI?.start();}});

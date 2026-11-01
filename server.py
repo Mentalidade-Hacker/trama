@@ -22,6 +22,7 @@ from proofreader import Proofreader, ProofreaderError
 from storage_features import StorageFeatures, setup as setup_storage, record_history, INLINE_TYPES, MAX_VAULT_REQUEST
 from sync_store import SyncStore, SyncError
 from auto_sync import AutoSync
+from sync_preview import preview_snapshot
 from proton_service import ProtonService
 from translation import TranslationService, TranslationError
 from dictionary import DictionaryService, DictionaryError
@@ -180,7 +181,7 @@ class Store:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Trama/0.7"
+    server_version = "Trama/0.8"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):
@@ -435,13 +436,20 @@ class Handler(SimpleHTTPRequestHandler):
             except (ValueError, RecursionError) as exc:
                 self.json_response(400, {"error": str(exc) or "Pedido de tradução inválido.", "code": "translation_invalid"})
             return
-        if path in ("/api/sync/config", "/api/sync/publish", "/api/sync/receive"):
+        if path in ("/api/sync/config", "/api/sync/publish", "/api/sync/receive", "/api/sync/check", "/api/sync/preview"):
             if not self.allowed():
                 return
             try:
                 payload = self.read_json()
-                action = {"/api/sync/config": self.server.store.sync.configure, "/api/sync/publish": self.server.store.sync.publish, "/api/sync/receive": self.server.store.sync.receive}[path]
-                self.json_response(200, action(payload))
+                if path == "/api/sync/check":
+                    if not isinstance(payload, dict):
+                        raise ValueError("Pedido de sincronização inválido.")
+                    self.json_response(200, self.server.auto_sync.request_check())
+                elif path == "/api/sync/preview":
+                    self.json_response(200, preview_snapshot(self.server.store, payload))
+                else:
+                    action = {"/api/sync/config": self.server.store.sync.configure, "/api/sync/publish": self.server.store.sync.publish, "/api/sync/receive": self.server.store.sync.receive}[path]
+                    self.json_response(200, action(payload))
             except SyncError as exc:
                 result = {"error": str(exc), "code": exc.code}
                 if exc.state is not None:
