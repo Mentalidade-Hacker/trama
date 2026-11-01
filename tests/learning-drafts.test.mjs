@@ -58,9 +58,42 @@ test('restored epoch archives browser text and only recovers it explicitly',asyn
   const recovered=b.recoverArchived(0);assert.equal(recovered.revision,0);await b.flush();assert.equal(f.remote.size,1);
 });
 
+test('restoration after a conflict fork archives the text instead of claiming a save in the new database',async()=>{
+  const f=fixture(),a=f.create();await a.ready;a.set(input('Original'));await a.flush();
+  let forkSaved=false;
+  const b=f.create({request:async(path,body)=>{
+    if(!body&&forkSaved){f.setEpoch('epoch-b');f.remote.clear();forkSaved=false;}
+    const result=await f.request(path,body);
+    if(body&&body.revision===0)forkSaved=true;
+    return result;
+  }});await b.ready;
+  a.set(input('Other window'));await a.flush();b.set(input('My concurrent writing'));
+  assert.equal(await b.flush(),false);assert.equal(f.remote.size,0);assert.equal(b.list().length,0);
+  assert.ok(b.archived.some(row=>row.data.text==='My concurrent writing'));
+  assert.match(b.status().message,/restaurado/);assert.doesNotMatch(b.status().message,/salvo neste computador/);
+  b.recoverArchived(0);await b.flush();assert.equal([...f.remote.values()][0].data.text,'My concurrent writing');
+});
+
 test('clearing text persists and does not resurrect the old draft',async()=>{
   const f=fixture(),a=f.create();await a.ready;a.set(input('Old'));await a.flush();a.set(input(''));await a.flush();
   const b=f.create();await b.ready;assert.equal(b.current('lesson').data.text,'');
+});
+
+test('a full 20000 UTF16 translation draft survives disk save and reload',async()=>{
+  const f=fixture(),a=f.create();await a.ready;const text='🙂'.repeat(10000);
+  a.set(input(text));assert.equal(await a.flush(),true);
+  const b=f.create();await b.ready;assert.equal(b.current('lesson').data.text,text);
+  assert.throws(()=>b.set(input(text+'x')));await b.flush();
+});
+
+test('shared draft observers receive pending and saved state and can unsubscribe',async()=>{
+  const f=fixture(),a=f.create();await a.ready;const events=[];
+  const unsubscribe=a.subscribe(value=>events.push(value.pending));
+  a.subscribe(()=>{throw Error('A closed panel must not prevent persistence');});
+  a.set(input('Shared draft'));await a.flush();
+  assert.ok(events.includes(true));assert.equal(events.at(-1),false);
+  unsubscribe();const count=events.length;a.set(input('Next draft'));await a.flush();
+  assert.equal(events.length,count);assert.equal(f.remote.size,1);
 });
 
 test('storage quota failure is reported and the server can still save',async()=>{
@@ -70,7 +103,7 @@ test('storage quota failure is reported and the server can still save',async()=>
 
 test('invalid lesson text and malformed cache cannot mutate saved drafts',async()=>{
   const f=fixture();f.storage.setItem(DRAFT_CACHE,'broken JSON');const a=f.create();await a.ready;
-  assert.throws(()=>a.set(input('x'.repeat(12001))));assert.equal(a.list().length,0);
+  assert.throws(()=>a.set(input('x'.repeat(20001))));assert.equal(a.list().length,0);
   assert.throws(()=>validateDraft({}));await a.flush();
 });
 
@@ -149,5 +182,29 @@ test('an older learning open request cannot start a lookup after the initial dra
     const older=ui.open({word:'obsolete-request',language:'en'}),newer=ui.open({word:'latest-request',language:'en'});
     resolveDrafts({epoch:'epoch-a',records:[]});await Promise.all([older,newer]);await new Promise(resolve=>setImmediate(resolve));
     assert.deepEqual(lookups,['latest-request']);assert.match(dialog.innerHTML,/latest-request/);
+  } finally {for(const [name,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
+});
+
+test('reopening a shared translation draft does not overwrite it with an unchanged closed learning field',async()=>{
+  const previous=new Map(),override=(name,value)=>{previous.set(name,Object.getOwnPropertyDescriptor(globalThis,name));Object.defineProperty(globalThis,name,{configurable:true,writable:true,value});};
+  const listeners=new Map(),stub={value:'',disabled:false,textContent:'',focus(){}};
+  let html='',field=null;
+  const dialog={open:false,setAttribute(){},addEventListener:(name,callback)=>listeners.set(name,callback),
+    querySelector:selector=>selector==='[data-learning-writing]'?field:stub,querySelectorAll:()=>[],
+    showModal(){this.open=true;},close(){this.open=false;listeners.get('close')?.();},
+    get innerHTML(){return html;},set innerHTML(value){html=value;const match=value.match(/<textarea[^>]*data-learning-lesson="([^"]+)"[^>]*>([\s\S]*?)<\/textarea>/);field=match?{value:match[2],dataset:{learningLesson:match[1]},remove(){field=null;},matches:selector=>selector==='[data-learning-writing]'}:null;}};
+  const f=fixture();
+  override('localStorage',new BrowserStorage());override('sessionStorage',new BrowserStorage());override('addEventListener',()=>{});
+  override('document',{createElement:()=>dialog,body:{append(){}},addEventListener(){}});override('window',{addEventListener(){}});
+  override('fetch',async(path,options)=>({ok:true,json:async()=>f.request(path,options?.body?JSON.parse(options.body):undefined)}));
+  try {
+    const ui=setupLearning({data:{version:1,pages:[]},finishEditing(){},language:()=> 'en-US',toast(){},flush:async()=>true});await ui.drafts.ready;
+    const translation={id:'translation:en:page:block:hash',kind:'writing',language:'en',title:'Translation practice',before:'Origem',after:'Reference',prompt:'Translate it.'};
+    const first=ui.drafts.set({key:translation.id,tab:'writing',lesson:translation,text:'Original attempt'});await ui.drafts.flush();
+    await ui.open({draftId:first.id});assert.equal(field.value,'Original attempt');assert.match(html,/ORIGINAL/);assert.match(html,/Revelar tradução para comparar/);
+    field.value='Edited in learning';listeners.get('input')({target:field});await ui.flushDrafts();ui.close();
+    ui.drafts.set({key:translation.id,tab:'writing',lesson:translation,text:'Newer translation attempt'});
+    await ui.flushDrafts();assert.equal(ui.drafts.current(translation.id).data.text,'Newer translation attempt');
+    await ui.open({draftId:first.id});assert.equal(field.value,'Newer translation attempt');await ui.flushDrafts();
   } finally {for(const [name,descriptor] of previous){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}}
 });

@@ -85,9 +85,17 @@ Rótulos de links simples podem ser traduzidos sem alterar os destinos. Código,
 
 Os cartões de vocabulário são blocos comuns na página **Vocabulário · Português e English**. Eles acompanham os backups e a troca de versões entre computadores. Os modelos e o ambiente de tradução precisam ser instalados em cada computador e não fazem parte do ZIP de notas.
 
-## Verificação desta versão
+## Rascunhos da prática na 0.9.1
+
+**Praticar escrita** salva sua tentativa automaticamente no navegador e no banco local. Ao reabrir, entre em **Aprender a escrever → Retomar um rascunho**. A atividade conserva original e referência e pode ser retomada mesmo com o motor de tradução indisponível. O botão **Continuar em Aprender** leva à mesma tentativa; **Guardar minha prática** a registra no grafo e agenda a revisão.
+
+O rascunho é local e entra no backup completo; só a prática guardada no grafo acompanha a sincronização das notas. A tentativa aceita 20.000 unidades UTF-16; referências muito longas são abreviadas a 12.000 por campo, com aviso. Alterar o texto original ou a tradução inicia outra atividade, preservando a anterior.
+
+## Verificações anteriores e da correção 0.9.1
 
 A instalação e a tradução real nos dois sentidos foram verificadas no Windows com Python 3.13, CTranslate2 4.8.4, SentencePiece 0.2.2 e modelos Argos 1.9. Também foram conferidos no navegador o salvamento da cópia, a hierarquia, o rótulo traduzido do link, a prática e o vocabulário. A instalação no Arch não foi executada neste ambiente. Na versão 0.4, o LanguageTool real também foi testado no Windows.
+
+O parágrafo anterior registra verificações de versões anteriores. Na 0.9.1, os testes de interface usaram uma resposta controlada de tradução para conferir o salvamento e a recuperação, inclusive com o tradutor de teste desligado. Isso não é uma nova avaliação do motor nem da qualidade das traduções. Veja [RELEASE-v0.9.1.md](RELEASE-v0.9.1.md).
 
 ## Fontes
 

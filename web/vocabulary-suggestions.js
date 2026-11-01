@@ -1,5 +1,5 @@
 import * as C from './core.js';
-import {protectedRanges,applySuggestion} from './proofread.js';
+import {protectedRanges,applySuggestion,markdownLinks} from './proofread.js';
 import {saveReviewCard,readLearning,validateLesson} from './learning-core.js';
 import {escapeHTML as esc} from './renderer.js';
 import {VOCABULARY_FAMILIES} from './vocabulary-data.js';
@@ -11,17 +11,19 @@ const families=new Map(VOCABULARY_FAMILIES.map(item=>[item.id,item]));
 const forms={pt:new Map(),en:new Map()};
 for(const family of VOCABULARY_FAMILIES)family.forms.forEach((word,index)=>forms[family.language].set(fold(word),{family,index}));
 const MAX_CHARACTERS=200000;
+const MAX_OCCURRENCES=40;
 export const SUGGESTED_VOCABULARY_PAGE='Vocabulário · Português e English';
 
 /** Ignore complete link labels as well as their destinations, and email addresses. */
 function vocabularyRanges(text) {
   const ranges=protectedRanges(text);
-  for(const match of text.matchAll(/!?\[[^\]\r\n]*\]\(/g)) {
-    let cursor=match.index+match[0].length,depth=1;
-    while(cursor<text.length&&depth){if(text[cursor]==='\\'){cursor+=2;continue;}if(text[cursor]==='(')depth++;else if(text[cursor]===')')depth--;cursor++;}
-    ranges.push([match.index,Math.min(cursor,text.length)]);
+  for(const {start,end} of markdownLinks(text))ranges.push([start,end]);
+  // Split runs before checking for an email: an unanchored greedy email regex
+  // otherwise retries every suffix of a long word with no @ (quadratic work).
+  for(const part of text.matchAll(/[^\s<>()]+/gu)){
+    const at=part[0].indexOf('@'),dot=part[0].indexOf('.',at+2);
+    if(at>0&&dot>at+1&&dot<part[0].length-1)ranges.push([part.index,part.index+part[0].length]);
   }
-  for(const match of text.matchAll(/[^\s<>()]+@[^\s<>()]+\.[^\s<>()]+/gu))ranges.push([match.index,match.index+match[0].length]);
   for(const match of text.matchAll(/https?:\/\/[^\s<>"`]+/giu))ranges.push([match.index,match.index+match[0].length]);
   ranges.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);const merged=[];
   for(const range of ranges){const last=merged.at(-1);if(last&&range[0]<=last[1])last[1]=Math.max(last[1],range[1]);else merged.push([...range]);}
@@ -42,6 +44,7 @@ export function vocabularyTokens(text,language='pt') {
 /** A repeated term is a prompt to review, never an assertion that repetition is wrong. */
 export function scanVocabulary(data,{pageId,blockId,language='pt',maxGroups=12}={}) {
   language=languageOf(language);const source=blockId?C.findBlock(data,blockId):null;
+  if(blockId&&!source)throw Error('Este bloco não está mais na página. Consulte o vocabulário novamente.');
   const page=source?.page||data.pages.find(item=>item.id===pageId);
   if(!page)throw Error('Abra uma página ou escolha um bloco para explorar o vocabulário.');
   const entries=blockId?(source?[source]:[]):C.walkBlocks([page]);
@@ -50,28 +53,30 @@ export function scanVocabulary(data,{pageId,blockId,language='pt',maxGroups=12}=
   for(const entry of entries) {
     if(characters>=MAX_CHARACTERS){truncated=true;break;}
     const remaining=MAX_CHARACTERS-characters,text=entry.block.text;
-    const inspected=text.length<=remaining?text:text.slice(0,remaining);
+    const inspected=text.length<=remaining?text:text.slice(0,splitSurrogate(text,remaining)?remaining-1:remaining);
     const fullRanges=inspected.length<text.length?vocabularyRanges(text):null;
     if(fullRanges)truncated=true;
     for(const token of vocabularyTokens(inspected,language)) {
       position++;
       // Do not offer a word cut in half at the analysis limit.
-      if(inspected.length<text.length&&token.offset+token.length===inspected.length&&/[\p{L}\p{M}]/u.test(text[inspected.length]))continue;
+      if(inspected.length<text.length&&token.offset+token.length===inspected.length&&/[\p{L}\p{M}\p{N}_'’\-]/u.test(String.fromCodePoint(text.codePointAt(inspected.length))))continue;
       if(token.ignored)continue;
       if(fullRanges&&overlaps(fullRanges,token.offset,token.length))continue;
       const found=forms[language].get(token.normalized);
       if(!found&&token.normalized.length<4)continue;
       const key=found?.family.id||`repeat:${language}:${token.normalized}`;
-      if(!grouped.has(key))grouped.set(key,{id:key,familyId:found?.family.id||null,word:found?.family.word||token.normalized,language,alternatives:found?.family.alternatives||[],occurrences:[],positions:[]});
-      const group=grouped.get(key);group.positions.push(position);
-      group.occurrences.push({blockId:entry.block.id,pageId:entry.page.id,pageTitle:entry.page.title,offset:token.offset,length:token.length,word:token.word,expectedText:text});
+      if(!grouped.has(key))grouped.set(key,{id:key,familyId:found?.family.id||null,word:found?.family.word||token.normalized,language,alternatives:found?.family.alternatives||[],occurrences:[],count:0,first:position,last:position,nearby:false});
+      const group=grouped.get(key);
+      group.nearby ||= group.count>0&&position-group.last<=80;group.last=position;group.count++;
+      if(group.occurrences.length<MAX_OCCURRENCES)group.occurrences.push({blockId:entry.block.id,pageId:entry.page.id,pageTitle:entry.page.title,offset:token.offset,length:token.length,word:token.word,expectedText:text});
     }
     characters+=inspected.length;
   }
   const groups=[...grouped.values()].flatMap(group=>{
-    const count=group.occurrences.length,repeated=count>=4||group.positions.some((value,index)=>index>0&&value-group.positions[index-1]<=80);
+    const repeated=group.count>=4||group.nearby;
     if(!repeated&&!group.familyId)return [];
-    return [{...group,count,reason:repeated?'repetition':'optional',first:group.positions[0]}];
+    const {last,nearby,...result}=group;
+    return [{...result,reason:repeated?'repetition':'optional'}];
   }).sort((a,b)=>(a.reason==='repetition'?0:1)-(b.reason==='repetition'?0:1)||(a.familyId?0:1)-(b.familyId?0:1)||b.count-a.count||a.first-b.first);
   return {pageId:page.id,pageTitle:page.title,blockId:blockId||null,language,groups:groups.slice(0,limit),moreGroups:Math.max(0,groups.length-limit),characters,truncated};
 }
@@ -81,10 +86,10 @@ function replacementCase(original,replacement) {
   if(original[0]===original[0].toLocaleUpperCase()&&original.slice(1)===original.slice(1).toLocaleLowerCase())return replacement[0].toLocaleUpperCase()+replacement.slice(1);
   return replacement;
 }
-function context(text,offset,length) {
-  let start=Math.max(0,offset-100),end=Math.min(text.length,offset+length+140);
-  const splits=index=>index>0&&index<text.length&&text.charCodeAt(index-1)>=0xD800&&text.charCodeAt(index-1)<=0xDBFF&&text.charCodeAt(index)>=0xDC00&&text.charCodeAt(index)<=0xDFFF;
-  if(splits(start))start--;if(splits(end))end++;
+function splitSurrogate(text,index){return index>0&&index<text.length&&text.charCodeAt(index-1)>=0xD800&&text.charCodeAt(index-1)<=0xDBFF&&text.charCodeAt(index)>=0xDC00&&text.charCodeAt(index)<=0xDFFF;}
+function context(text,offset,length,before=100,after=140) {
+  let start=Math.max(0,offset-before),end=Math.min(text.length,offset+length+after);
+  if(splitSurrogate(text,start))start--;if(splitSurrogate(text,end))end++;
   return {start,end,before:text.slice(start,offset),word:text.slice(offset,offset+length),after:text.slice(offset+length,end)};
 }
 
@@ -122,7 +127,7 @@ export function prepareVocabularyChange(data,selection,options={}) {
   if(!card.block.children.some(block=>block.text===origin))card.block.children.push(C.newBlock(origin));
   const vocabularyPage=C.ensurePage(next,SUGGESTED_VOCABULARY_PAGE);
   const marker='```trama-vocabulary-choice-v1\n'+JSON.stringify({version:1,lessonId:lesson.id})+'\n```';
-  let vocabularyBlock=vocabularyPage.blocks.find(block=>block.children.some(child=>child.text===marker));
+  let vocabularyBlock=C.walkBlocks([vocabularyPage]).find(({block})=>block.children.some(child=>child.text===marker))?.block;
   if(!vocabularyBlock){
     vocabularyBlock=C.newBlock(`${choice.alternative.word} #trama/vocabulario`);
     vocabularyBlock.children=[C.newBlock(`Significado: ${choice.alternative.meaning}`),C.newBlock(`Uso: ${choice.alternative.usage}`),
@@ -185,22 +190,33 @@ export function setupVocabulary(ctx) {
   try{hints=localStorage.getItem('trama-vocabulary-hints')==='on';}catch{}
   const group=()=>analysis?.groups[selectedGroup],occurrence=()=>group()?.occurrences[selectedOccurrence];
   function selection(alternativeId){return {...occurrence(),familyId:group().familyId,alternativeId};}
+  function occurrenceLabel(item){const c=context(item.expectedText,item.offset,item.length,25,40);return (c.before+c.word+c.after).replace(/\s+/g,' ');}
   function excerptHTML(item){const c=context(item.expectedText,item.offset,item.length);return `${c.start?'…':''}${esc(c.before)}<mark>${esc(c.word)}</mark>${esc(c.after)}${c.end<item.expectedText.length?'…':''}`;}
   function bodyHTML(){
     const item=group(),selected=occurrence();
     if(!item)return '<p class="vocab-empty">Não há sugestões na parte analisada. Isso não é uma nota de qualidade: manter palavras claras e repetir termos importantes pode ser a melhor escolha.</p>';
-    return `<div class="vocab-layout"><nav class="vocab-word-list" aria-label="Palavras para explorar">${analysis.groups.map((entry,index)=>`<button type="button" data-vocab-group="${index}" aria-pressed="${index===selectedGroup}"><strong>${esc(entry.word)}</strong><small>${entry.reason==='repetition'?`${entry.count} ocorrências · rever repetição`:'Escolha opcional de vocabulário'}</small></button>`).join('')}</nav><section class="vocab-detail"><h3>${esc(item.word)}</h3><p>${item.reason==='repetition'?'A repetição pode ser necessária para manter o assunto preciso. Considere variar apenas se isso ajudar o leitor.':'Esta palavra pode funcionar muito bem. Explore outra opção apenas se ela expressar melhor o sentido desejado.'}</p><label>Ocorrência que quero revisar<select data-vocab-occurrence>${item.occurrences.slice(0,40).map((entry,index)=>`<option value="${index}" ${index===selectedOccurrence?'selected':''}>${index+1} · ${esc(entry.expectedText.slice(Math.max(0,entry.offset-25),entry.offset+entry.length+40).replace(/\s+/g,' '))}</option>`).join('')}</select></label>${item.count>40?'<small>Mostrando as primeiras 40 ocorrências. Abra um bloco específico para reduzir o escopo.</small>':''}<div class="vocab-context" lang="${analysis.language}">${excerptHTML(selected)}</div>${item.alternatives.length?`<p class="proof-note">Confira a classe da palavra, o sentido e a concordância no seu texto. Estas alternativas foram preparadas para estudo; não são uma correção automática.</p>${item.alternatives.map(alternative=>{
+    return `<div class="vocab-layout"><nav class="vocab-word-list" aria-label="Palavras para explorar">${analysis.groups.map((entry,index)=>`<button type="button" data-vocab-group="${index}" aria-pressed="${index===selectedGroup}"><strong>${esc(entry.word)}</strong><small>${entry.reason==='repetition'?`${entry.count} ocorrências · rever repetição`:'Escolha opcional de vocabulário'}</small></button>`).join('')}</nav><section class="vocab-detail"><h3>${esc(item.word)}</h3><p>${item.reason==='repetition'?'A repetição pode ser necessária para manter o assunto preciso. Considere variar apenas se isso ajudar o leitor.':'Esta palavra pode funcionar muito bem. Explore outra opção apenas se ela expressar melhor o sentido desejado.'}</p><label>Ocorrência que quero revisar<select data-vocab-occurrence>${item.occurrences.slice(0,40).map((entry,index)=>`<option value="${index}" ${index===selectedOccurrence?'selected':''}>${index+1} · ${esc(occurrenceLabel(entry))}</option>`).join('')}</select></label>${item.count>40?'<small>Mostrando as primeiras 40 ocorrências. Abra um bloco específico para reduzir o escopo.</small>':''}<div class="vocab-context" lang="${analysis.language}">${excerptHTML(selected)}</div>${item.alternatives.length?`<p class="proof-note">Confira a classe da palavra, o sentido e a concordância no seu texto. Estas alternativas foram preparadas para estudo; não são uma correção automática.</p>${item.alternatives.map(alternative=>{
       const choice=vocabularyChoice(selection(alternative.id)),c=choice.context;
       return `<article class="vocab-alternative"><h4>${esc(choice.replacement)}</h4><p>${esc(alternative.meaning)}</p><p class="vocab-usage">${esc(alternative.usage)}</p>${alternative.examples.map(example=>`<blockquote lang="${analysis.language}">${esc(example.text)}</blockquote>`).join('')}<div class="vocab-proposal"><small>Como ficaria neste trecho</small><p lang="${analysis.language}">${c.start?'…':''}${esc(c.before)}<strong>${esc(choice.replacement)}</strong>${esc(c.after)}${c.end<selected.expectedText.length?'…':''}</p></div>${choice.adjustment?`<p class="vocab-notice">${esc(choice.adjustment)}</p>`:''}<button class="primary" type="button" data-vocab-apply="${esc(alternative.id)}" ${writer.busy||writer.pending||choice.adjustment?'disabled':''}>Usar nesta ocorrência e guardar para revisão</button></article>`;
     }).join('')}`:'<p>Não há uma alternativa contextualizada na coleção para esta palavra. Você pode manter o termo, consultar seu significado ou reescrever a frase. Não sugerimos uma troca inventada.</p>'}<div class="vocab-actions"><button class="secondary" type="button" data-vocab-dictionary>Consultar significado</button><button class="secondary" type="button" data-vocab-keep>Manter a palavra e continuar</button></div></section></div>`;
   }
-  function render(){
-    dialog.innerHTML=`<header class="vocab-header"><div><small>ESCOLHAS PARA ESCREVER COM PRECISÃO</small><h2>Explorar vocabulário</h2><p>Uma palavra mais longa não é necessariamente melhor. Compare o sentido antes de trocar.</p></div><button type="button" data-vocab-close aria-label="Fechar sugestões">✕</button></header><div class="vocab-toolbar"><label>Idioma<select data-vocab-language ${writer.busy||writer.pending?'disabled':''}><option value="pt" ${analysis?.language==='pt'?'selected':''}>Português</option><option value="en" ${analysis?.language==='en'?'selected':''}>English</option></select></label><span>${esc(analysis?.pageTitle||'')} · ${analysis?.blockId?'bloco escolhido':'página e seus blocos'}</span><button class="secondary" type="button" data-vocab-refresh ${writer.busy||writer.pending?'disabled':''}>Consultar novamente</button>${analysis?.blockId?'<button class="secondary" type="button" data-vocab-page>Ver página inteira</button>':''}</div><div class="vocab-body">${message?`<p class="vocab-success" role="status">${esc(message)}</p>`:''}${error?`<p class="vocab-error" role="alert">${esc(error)}</p>`:''}${writer.busy?'<p role="status">Salvando a palavra e o cartão juntos…</p>':''}${writer.pending&&!writer.busy?'<p class="vocab-notice">A alteração está pendente de confirmação no disco.</p><button class="primary" type="button" data-vocab-retry>Tentar salvar a mesma alteração</button>':''}${analysis?.truncated?'<p class="vocab-notice">A consulta analisou até 200 mil caracteres. Abra um bloco específico para explorar partes que não entraram neste limite.</p>':''}${bodyHTML()}${analysis?.moreGroups?`<p class="proof-note">Há mais ${analysis.moreGroups} palavras na análise. Abra um bloco específico para concentrar a consulta.</p>`:''}<label class="vocab-hints"><input type="checkbox" data-vocab-hints ${hints?'checked':''}> Mostrar um convite discreto ao escrever, após uma pausa</label><p class="proof-note">Desligado por padrão. O convite nunca abre esta tela sozinho nem troca palavras. As sugestões são locais; a coleção de alternativas é finita.</p></div>`;
+  function render({focus}={}){
+    const active=document.activeElement;
+    const attribute=dialog.contains(active)?['data-vocab-group','data-vocab-occurrence','data-vocab-language','data-vocab-keep','data-vocab-more','data-vocab-refresh','data-vocab-page','data-vocab-retry','data-vocab-apply'].find(name=>active.hasAttribute(name)):null;
+    const value=attribute?active.getAttribute(attribute):null;
+    dialog.innerHTML=`<header class="vocab-header"><div><small>ESCOLHAS PARA ESCREVER COM PRECISÃO</small><h2>Explorar vocabulário</h2><p>Uma palavra mais longa não é necessariamente melhor. Compare o sentido antes de trocar.</p></div><button type="button" data-vocab-close aria-label="Fechar sugestões">✕</button></header><div class="vocab-toolbar"><label>Idioma<select data-vocab-language ${writer.busy||writer.pending?'disabled':''}><option value="pt" ${analysis?.language==='pt'?'selected':''}>Português</option><option value="en" ${analysis?.language==='en'?'selected':''}>English</option></select></label><span>${esc(analysis?.pageTitle||'')} · ${analysis?.blockId?'bloco escolhido':'página e seus blocos'}</span><button class="secondary" type="button" data-vocab-refresh ${writer.busy||writer.pending?'disabled':''}>Consultar novamente</button>${analysis?.blockId?'<button class="secondary" type="button" data-vocab-page>Ver página inteira</button>':''}</div><div class="vocab-body"><div data-vocab-status tabindex="-1">${message?`<p class="vocab-success" role="status">${esc(message)}</p>`:''}${error?`<p class="vocab-error" role="alert" tabindex="-1">${esc(error)}</p>`:''}${writer.busy?'<p role="status">Salvando a palavra e o cartão juntos…</p>':''}${writer.pending&&!writer.busy?'<p class="vocab-notice">A alteração está pendente de confirmação no disco.</p><button class="primary" type="button" data-vocab-retry>Tentar salvar a mesma alteração</button>':''}</div>${analysis?.truncated?'<p class="vocab-notice">A consulta analisou até 200 mil caracteres. Abra um bloco específico para explorar partes que não entraram neste limite.</p>':''}${bodyHTML()}${analysis?.moreGroups?`<p class="proof-note">Há mais ${analysis.moreGroups} palavras na análise. Abra um bloco específico para concentrar a consulta.</p>`:''}<label class="vocab-hints"><input type="checkbox" data-vocab-hints ${hints?'checked':''}> Mostrar um convite discreto ao escrever, após uma pausa</label><p class="proof-note">Desligado por padrão. O convite nunca abre esta tela sozinho nem troca palavras. As sugestões são locais; a coleção de alternativas é finita.</p></div>`;
     if(analysis?.moreGroups&&displayLimit<200){const more=document.createElement('button');more.type='button';more.dataset.vocabMore='';more.textContent='Ver mais palavras';more.disabled=writer.busy||!!writer.pending;$('.vocab-word-list')?.append(more);}
+    dialog.querySelectorAll('[data-vocab-group],[data-vocab-occurrence],[data-vocab-keep],[data-vocab-page]').forEach(node=>{node.disabled=writer.busy||!!writer.pending;});
+    if(dialog.open&&(focus||attribute)){
+      const remembered=attribute?[...dialog.querySelectorAll(`[${attribute}]`)].find(node=>node.getAttribute(attribute)===value&&!node.disabled):null;
+      const feedback=message||error||writer.busy||writer.pending;
+      const target=(focus?$(focus):remembered)||$('[role="alert"]')||(feedback?$('[data-vocab-status]'):null)||$('[data-vocab-close]');
+      target?.focus({preventScroll:true});
+    }
   }
-  function refresh({language=analysis?.language||languageOf(ctx.language?.()),blockId=analysis?.blockId,pageId=analysis?.pageId||ctx.page?.id}={}) {
+  function refresh({language=analysis?.language||languageOf(ctx.language?.()),blockId=analysis?.blockId,pageId=analysis?.pageId||ctx.page?.id,focus}={}) {
     if(writer.busy||writer.pending){ctx.toast('Conclua o salvamento pendente antes de consultar novamente.');return;}
-    try{analysis=scanVocabulary(ctx.data,{pageId,blockId,language,maxGroups:displayLimit});selectedGroup=0;selectedOccurrence=0;error='';render();}catch(failure){ctx.toast(failure.message);}
+    try{analysis=scanVocabulary(ctx.data,{pageId,blockId,language,maxGroups:displayLimit});selectedGroup=0;selectedOccurrence=0;error='';render({focus});}catch(failure){ctx.toast(failure.message);}
   }
   function open(options={}) {
     if(writer.busy){ctx.toast('Aguarde o salvamento da sugestão.');return;}
@@ -211,8 +227,8 @@ export function setupVocabulary(ctx) {
   async function apply(alternativeId){
     if(writer.busy||writer.pending)return;const chosen=selection(alternativeId);error='';message='';
     const action=writer.commit(chosen);render();
-    try{const saved=await action;message=`“${saved.replacement}” foi aplicada nesta ocorrência e guardada em Meu vocabulário. O cartão está em Aprender a escrever → Revisar; ele não conta como uma frase própria praticada.`;refresh();}
-    catch(failure){error=failure.message;render();}
+    try{const saved=await action;message=`“${saved.replacement}” foi aplicada nesta ocorrência e guardada em Meu vocabulário. O cartão está em Aprender a escrever → Revisar; ele não conta como uma frase própria praticada.`;refresh({focus:'[data-vocab-status]'});}
+    catch(failure){error=failure.message;render({focus:'[role="alert"]'});}
   }
   function removeHint(){hint?.remove();hint=null;}
   function scheduleHint(editor){
@@ -239,7 +255,7 @@ export function setupVocabulary(ctx) {
     if(target.closest('[data-vocab-page]'))refresh({blockId:null});
     if(target.closest('[data-vocab-keep]')&&!writer.busy&&!writer.pending){selectedGroup=(selectedGroup+1)%Math.max(analysis.groups.length,1);selectedOccurrence=0;render();}
     if(target.closest('[data-vocab-dictionary]')&&group()){const word=occurrence()?.word||group().word,language=analysis.language;dialog.close();document.dispatchEvent(new CustomEvent('trama:dictionary',{detail:{word,language}}));}
-    if(target.closest('[data-vocab-retry]')){error='';const action=writer.retry();render();void action.then(saved=>{if(saved){message='A palavra e o cartão foram salvos.';refresh();}}).catch(failure=>{error=failure.message;render();});}
+    if(target.closest('[data-vocab-retry]')){error='';const action=writer.retry();render();void action.then(saved=>{if(saved){message='A palavra e o cartão foram salvos.';refresh({focus:'[data-vocab-status]'});}}).catch(failure=>{error=failure.message;render({focus:'[role="alert"]'});});}
   });
   dialog.addEventListener('change',event=>{
     if(event.target.matches('[data-vocab-language]')){refresh({language:event.target.value});$('[data-vocab-language]')?.focus({preventScroll:true});}

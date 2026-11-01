@@ -17,7 +17,7 @@ export function setupLearning(ctx) {
   const dialog = document.createElement('dialog');
   dialog.id = 'learning-dialog'; dialog.setAttribute('aria-label', 'Aprender a escrever');
   document.body.append(dialog);
-  const writer = createLearningWriter(ctx), savedDrafts = new Map(), draftContexts = new Map();
+  const writer = createLearningWriter(ctx), savedDrafts = new Map(), draftContexts = new Map(), capturedFields = new WeakMap();
   const drafts = browserDraftStore(() => { const label=dialog.querySelector('[data-draft-status]'); if(label)label.textContent=drafts.status().message; });
   let state = {language:'pt', tab:'words', lesson:null, expanded:false, choice:null, feedback:null, revealed:false};
   let sequence = 0, controller = null, notice = '', error = '', loading = false, pendingAction = null;
@@ -28,7 +28,9 @@ export function setupLearning(ctx) {
   function stop() { sequence++; controller?.abort(); controller = null; }
   function captureDraft() {
     const field = $('[data-learning-writing]'), context = draftContexts.get(field?.dataset.learningLesson);
-    if (field && context) drafts.set({...context,text:field.value});
+    if (field && context && capturedFields.get(field)!==field.value) {
+      drafts.set({...context,text:field.value}); capturedFields.set(field,field.value);
+    }
   }
   dialog.addEventListener('close', () => { captureDraft(); void drafts.flush(); stop(); });
   window.addEventListener('pagehide', () => { captureDraft(); void drafts.flush(); });
@@ -91,20 +93,20 @@ export function setupLearning(ctx) {
     draftContexts.set(draftKey(),{key:draftKey(),lesson,tab:state.tab});
     const count = readLearning(ctx.data).cards.get(lesson.id)?.state.attempts || 0;
     const saved = savedDrafts.get(draftKey()) === currentDraft().trim();
-    return `<section class="learn-practice"><span class="learn-step">${review?'PRATIQUE DE MEMÓRIA':lesson.quiz?'2 · USE DO SEU JEITO':'AGORA É COM VOCÊ'}</span><h3>Uma frase que seja sua</h3><p id="learn-writing-prompt">${esc(lesson.prompt)}</p><label class="learn-writing-label" for="learn-own-sentence">Meu texto em ${labels[lesson.language]}</label><textarea id="learn-own-sentence" rows="4" maxlength="12000" data-learning-writing data-learning-lesson="${esc(draftKey())}" data-writing-language="${lesson.language==='pt'?'pt-BR':'en-US'}" lang="${lesson.language==='pt'?'pt-BR':'en-US'}" spellcheck="true" aria-describedby="learn-writing-prompt" placeholder="Pense em uma situação real e escreva uma frase…">${esc(currentDraft())}</textarea><p class="learn-footnote" data-draft-status role="status">${esc(drafts.status().message)}</p><div class="learn-practice-actions"><button class="primary" data-learn-save ${writer.busy||writer.pending||saved?'disabled':''}>${saved?'Esta versão já está guardada':'Guardar minha prática'}</button><span>${count&&!writer.pending?`${count} ${count===1?'texto guardado':'textos guardados'} nesta atividade`:'Seu texto fica no seu grafo'}</span></div><p class="learn-footnote">O rascunho é salvo automaticamente neste computador e pode ser retomado ao reabrir. “Guardar minha prática” registra uma versão no grafo e agenda sua revisão. As sugestões ajudam com a forma; o sentido e a adequação continuam sendo escolhas suas.</p></section>`;
+    return `<section class="learn-practice"><span class="learn-step">${review?'PRATIQUE DE MEMÓRIA':lesson.quiz?'2 · USE DO SEU JEITO':'AGORA É COM VOCÊ'}</span><h3>Uma frase que seja sua</h3><p id="learn-writing-prompt">${esc(lesson.prompt)}</p><label class="learn-writing-label" for="learn-own-sentence">Meu texto em ${labels[lesson.language]}</label><textarea id="learn-own-sentence" rows="4" maxlength="20000" data-learning-writing data-learning-lesson="${esc(draftKey())}" data-writing-language="${lesson.language==='pt'?'pt-BR':'en-US'}" lang="${lesson.language==='pt'?'pt-BR':'en-US'}" spellcheck="true" aria-describedby="learn-writing-prompt" placeholder="Pense em uma situação real e escreva uma frase…">${esc(currentDraft())}</textarea><p class="learn-footnote" data-draft-status role="status">${esc(drafts.status().message)}</p><div class="learn-practice-actions"><button class="primary" data-learn-save ${writer.busy||writer.pending||saved?'disabled':''}>${saved?'Esta versão já está guardada':'Guardar minha prática'}</button><span>${count&&!writer.pending?`${count} ${count===1?'texto guardado':'textos guardados'} nesta atividade`:'Seu texto fica no seu grafo'}</span></div><p class="learn-footnote">O rascunho é salvo automaticamente neste computador e pode ser retomado ao reabrir. “Guardar minha prática” registra uma versão no grafo e agenda sua revisão. As sugestões ajudam com a forma; o sentido e a adequação continuam sendo escolhas suas.</p></section>`;
   }
 
   function lessonContent() {
     const lesson = state.lesson;
     if (loading) return '<div class="learn-empty" role="status"><span class="learn-loading"></span><h3>Buscando o significado no dicionário local…</h3><p>A palavra fica neste computador.</p></div>';
     if (!lesson) return '<div class="learn-empty"><h3>Nenhuma atividade disponível neste idioma.</h3></div>';
-    const correction = lesson.kind === 'correction', isWriting = lesson.kind === 'writing' || correction;
+    const correction = lesson.kind === 'correction', isWriting = lesson.kind === 'writing' || correction, translation = lesson.id.startsWith('translation:');
     const saved = !writer.pending && !writer.busy && !!readLearning(ctx.data).cards.get(lesson.id)?.state.dueAt;
     return `<div class="learn-lesson-top"><span class="learn-pill">${correction?'A PARTIR DA SUA CORREÇÃO':lesson.kind==='dictionary'?'UMA PALAVRA QUE VOCÊ ESCOLHEU':isWriting?'OFICINA DE ESCRITA':'PALAVRA EM USO'}</span>${!correction&&lesson.kind!=='dictionary'?'<button class="learn-next" data-learn-next>Outra atividade →</button>':''}</div>
       <article class="learn-card"><div class="learn-card-heading"><h3 lang="${lesson.language}">${esc(isWriting?lesson.title:lesson.word)}</h3>${lesson.partOfSpeech&&!correction?`<span>${esc(lesson.partOfSpeech)}</span>`:''}</div>${!correction&&partOfSpeechHelp(lesson.partOfSpeech)?`<p class="learn-class-help">${esc(partOfSpeechHelp(lesson.partOfSpeech))}</p>`:''}
       ${lesson.meaning&&!correction?`<p class="learn-meaning">${esc(lesson.meaning)}</p>`:''}
-      ${isWriting?`<div class="learn-comparison"><section><span>ANTES</span><p lang="${lesson.language}">${esc(lesson.before)}</p></section>${state.expanded||correction?`<section class="learn-after"><span>${correction?'SUGESTÃO PARA ESTE ALERTA':'UMA FORMA MAIS CLARA'}</span><p lang="${lesson.language}">${esc(lesson.after)}</p></section>`:''}</div>`:''}
-      ${state.expanded||correction?`${lesson.explanation?`<div class="learn-explanation"><h4>O que mudou e por quê</h4><p>${esc(lesson.explanation)}</p></div>`:''}${correction&&lesson.meaning?`<section class="learn-related"><h4>Uma palavra relacionada para explorar: ${esc(lesson.word)}</h4><p class="learn-footnote">Atividade autoral para estudar um uso da palavra; não é uma análise da classe ou do sentido dela na sua frase.</p><p class="learn-meaning">${esc(lesson.meaning)}</p>${lesson.partOfSpeech?`<p class="learn-class-help">${esc(lesson.partOfSpeech)} · ${esc(partOfSpeechHelp(lesson.partOfSpeech))}</p>`:''}${examples(lesson)}</section>`:correction?'':examples(lesson)}`:`<button class="secondary learn-reveal" data-learn-expand>${isWriting?'Ver uma revisão possível e entender a mudança':'Ver exemplos e diferenças de uso'}</button>`}
+      ${isWriting?`<div class="learn-comparison"><section><span>${translation?'ORIGINAL':'ANTES'}</span><p lang="${translation?(lesson.language==='en'?'pt':'en'):lesson.language}">${esc(lesson.before)}</p></section>${state.expanded||correction?`<section class="learn-after"><span>${translation?'UMA TRADUÇÃO POSSÍVEL':correction?'SUGESTÃO PARA ESTE ALERTA':'UMA FORMA MAIS CLARA'}</span><p lang="${lesson.language}">${esc(lesson.after)}</p></section>`:''}</div>`:''}
+      ${state.expanded||correction?`${lesson.explanation?`<div class="learn-explanation"><h4>${translation?'Sobre esta prática':'O que mudou e por quê'}</h4><p>${esc(lesson.explanation)}</p></div>`:''}${correction&&lesson.meaning?`<section class="learn-related"><h4>Uma palavra relacionada para explorar: ${esc(lesson.word)}</h4><p class="learn-footnote">Atividade autoral para estudar um uso da palavra; não é uma análise da classe ou do sentido dela na sua frase.</p><p class="learn-meaning">${esc(lesson.meaning)}</p>${lesson.partOfSpeech?`<p class="learn-class-help">${esc(lesson.partOfSpeech)} · ${esc(partOfSpeechHelp(lesson.partOfSpeech))}</p>`:''}${examples(lesson)}</section>`:correction?'':examples(lesson)}`:`<button class="secondary learn-reveal" data-learn-expand>${translation?'Revelar tradução para comparar':isWriting?'Ver uma revisão possível e entender a mudança':'Ver exemplos e diferenças de uso'}</button>`}
       ${source(lesson)}${correction?`<button class="secondary" data-learn-card ${writer.busy||writer.pending||saved?'disabled':''}>${saved?'Correção guardada para revisar':'Guardar esta correção para revisar'}</button>${lesson.word?` <button class="secondary" data-learn-dictionary>Consultar palavra no dicionário</button>`:''}<p class="learn-footnote">Este cartão só é guardado quando você pede. A explicação acima é a sugestão recebida do corretor.</p>`:lesson.kind==='dictionary'?`<button class="secondary" data-learn-card ${writer.busy||writer.pending||saved?'disabled':''}>${saved?'Palavra guardada para revisar':'Guardar palavra para revisar'}</button>`:''}</article>
       ${quiz(lesson)}${practice(lesson)}<div class="learn-bottom"><span>Uma atividade de cada vez já é um começo.</span>${!correction&&lesson.kind!=='dictionary'?'<button class="secondary" data-learn-next>Continuar com outra atividade →</button>':''}</div>`;
   }
@@ -143,6 +145,7 @@ export function setupLearning(ctx) {
     const reveal = $('[data-learn-reveal]'); if (reveal) reveal.onclick = () => { state.revealed = true; render(); };
     dialog.querySelectorAll('[data-learn-rate]').forEach(button=>button.onclick=()=>rate(button.dataset.learnRate));
     const retry = $('[data-learn-retry]'); if (retry) retry.onclick = retrySave;
+    const field = $('[data-learning-writing]'); if(field)capturedFields.set(field,field.value);
   }
 
   async function perform(mutate, message, afterSaved=null) {
@@ -236,7 +239,9 @@ export function setupLearning(ctx) {
     const opening=sequence;
     await drafts.ready;
     if(opening!==sequence)return;
-    const latest = drafts.list().find(row=>row.data.text);
+    const requested = detail.draftId ? drafts.list().find(row=>row.id===detail.draftId) : null;
+    if (detail.draftId && !requested) { ctx.toast('Este rascunho não está mais disponível. Abra Aprender para ver as cópias salvas.'); return; }
+    const latest = requested || drafts.list().find(row=>row.data.text);
     if (!detail.word && !detail.correction && latest) {
       restoreDraft(latest);if(!dialog.open)dialog.showModal();dialog.scrollTop=0;return;
     }
@@ -263,5 +268,5 @@ export function setupLearning(ctx) {
 
   document.addEventListener('click', event => { if (event.target.closest('[data-learning-open]')) { event.preventDefault(); open(); } });
   document.addEventListener('trama:learn', event => open(event.detail || {}));
-  return {open, close:()=>dialog.close(), dialog, flushDrafts:async()=>{captureDraft();return drafts.flush();}};
+  return {open, close:()=>dialog.close(), dialog, drafts, flushDrafts:async()=>{captureDraft();return drafts.flush();}};
 }

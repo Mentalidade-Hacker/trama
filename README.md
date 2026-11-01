@@ -1,16 +1,16 @@
-# Trama 0.9
+# Trama 0.9.1
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.9 adiciona **rascunhos de aprendizagem salvos automaticamente**, amplia o dicionário inglês, sugere escolhas de vocabulário com revisão espaçada e inclui **backup completo com restauração guiada**. Mantém a sincronização automática opcional e a comparação de conflitos da 0.8. O tamanho das letras pode ser ajustado de 80% a 200%. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+Funciona sem conta e sem internet depois de instalados os requisitos. A versão 0.9 adicionou **rascunhos de aprendizagem salvos automaticamente**, amplia o dicionário inglês, sugere escolhas de vocabulário com revisão espaçada e inclui **backup completo com restauração guiada**. A correção **0.9.1** salva também a prática de tradução, preserva cartões em blocos hierárquicos, melhora a análise de textos longos e reforça a recuperação de backups. Mantém a sincronização automática opcional e a comparação de conflitos da 0.8. O tamanho das letras pode ser ajustado de 80% a 200%. Mantém os temas claro/escuro, a área **Aprender a escrever**, o vocabulário bilíngue, os exercícios, o corretor e o dicionário. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
-Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Recomenda-se usar a **0.9 nos dois computadores** para obter as melhorias de conferência e comparação. O formato das cópias continua compatível com a 0.7.
+Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Recomenda-se usar a **0.9.1 nos dois computadores** para obter as melhorias de conferência e comparação. O formato das cópias continua compatível com a 0.7.
 
-- [Trama 0.9 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9/trama-v0.9-windows-linux.zip).
-- [Trama 0.9 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9/trama-v0.9-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.9](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9/trama-v0.9-SHA256.txt).
+- [Trama 0.9.1 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9.1/trama-v0.9.1-windows-linux.zip).
+- [Trama 0.9.1 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9.1/trama-v0.9.1-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.9.1](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.9.1/trama-v0.9.1-SHA256.txt).
 
 Extraia o pacote. Com **Python 3.10 ou mais recente** e um navegador atual, abra `start.cmd` no Windows ou execute `bash start.sh` no Arch Linux. Os detalhes estão nas seções abaixo. Os pacotes contêm código-fonte e lançadores, não um executável independente do Python.
 
@@ -268,4 +268,4 @@ Node.js é usado apenas nos testes de desenvolvimento. A aplicação usa Python 
 
 Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A sincronização automática troca versões completas e pausa quando há divergências; não oferece a edição colaborativa simultânea do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).
 
-O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.9.md](TESTE-PROTON-0.9.md). O relatório da versão distingue testes executados e verificações pendentes: [RELEASE-v0.9.md](RELEASE-v0.9.md).
+O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.9.1.md](TESTE-PROTON-0.9.1.md). O relatório da versão distingue testes executados e verificações pendentes: [RELEASE-v0.9.1.md](RELEASE-v0.9.1.md).

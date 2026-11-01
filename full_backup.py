@@ -296,6 +296,28 @@ class FullBackup:
     def _write(self, path, content):
         self.store.sync._write_exclusive(path, content)
 
+    def _sync_directory(self):
+        if os.name != "nt":
+            descriptor = os.open(self.store.directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+
+    def _publish_journal(self, journal):
+        # A process interrupted during the write must leave an ignored staging
+        # file, never a truncated recovery record that prevents opening notes.
+        temporary = self.store.directory / f".full-backup-restore-{uuid.uuid4().hex}.tmp"
+        written = False
+        try:
+            self._write(temporary, _json(journal))
+            written = True
+            os.replace(temporary, self.journal)
+            self._sync_directory()
+        finally:
+            if written:
+                temporary.unlink(missing_ok=True)
+
     def _recover_pending(self):
         if not self.journal.exists():
             return None
@@ -395,9 +417,9 @@ class FullBackup:
                 self._write(old_file, self.store.sync.config_path.read_bytes())
             journal = {"token": token, "oldConfig": old, "targetConfig": target, "oldConfigExisted": existed,
                        "oldConfigError": self.store.sync.config_error}
-            self._write(self.journal, _json(journal))
             committed = False
             try:
+                self._publish_journal(journal)
                 with self.store.connect() as db:
                     db.execute("BEGIN IMMEDIATE")
                     self.store.check_revision(db, payload["revision"])

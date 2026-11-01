@@ -5,15 +5,15 @@ const copy = value => JSON.parse(JSON.stringify(value));
 
 export function validateDraft(row) {
   const data = row?.data, lesson = validateLesson(data?.lesson);
-  if (!data || !/^[A-Za-z0-9_-]{1,128}$/.test(data.id) || row.id !== data.id || !['words','writing','review'].includes(data.tab) || data.language !== lesson.language || data.key !== (data.tab === 'review' ? 'review:' : '') + lesson.id || typeof data.text !== 'string' || data.text.length > 12000 || !Number.isSafeInteger(row.revision) || row.revision < 0 || !Number.isFinite(Date.parse(row.updated))) throw Error('Rascunho inválido.');
+  if (!data || !/^[A-Za-z0-9_-]{1,128}$/.test(data.id) || row.id !== data.id || !['words','writing','review'].includes(data.tab) || data.language !== lesson.language || data.key !== (data.tab === 'review' ? 'review:' : '') + lesson.id || typeof data.text !== 'string' || data.text.length > 20000 || !Number.isSafeInteger(row.revision) || row.revision < 0 || !Number.isFinite(Date.parse(row.updated))) throw Error('Rascunho inválido.');
   return {id: data.id, revision: row.revision, updated: row.updated, data: {id:data.id,key:data.key,tab:data.tab,language:data.language,lesson,text:data.text}, dirty: row.dirty === true};
 }
 
 /** Write-through browser cache plus optimistic, independently versioned disk records. */
 export function createDraftStore({request, storage, uid = () => crypto.randomUUID(), onChange = () => {}, delay = 500, cacheKey = DRAFT_CACHE, initialCache} = {}) {
-  const records = new Map(), selected = new Map();
+  const records = new Map(), selected = new Map(), listeners = new Set([onChange]);
   let epoch = null, connected = false, timer = null, busy = null, cacheOK = false, failure = '', archived = [];
-  function emit() { onChange(status()); }
+  function emit() { const value=status(); for(const listener of listeners) { try { listener(value); } catch {} } }
   function list() { return [...records.values()].sort((a,b)=>b.updated.localeCompare(a.updated)); }
   function cache() {
     try {
@@ -32,8 +32,7 @@ export function createDraftStore({request, storage, uid = () => crypto.randomUUI
       for(const row of Array.isArray(cached.archived)?cached.archived:[]){try{archived.push(validateDraft(row));}catch{}}
     }
   } catch { failure = 'Não foi possível recuperar a cópia do navegador.'; }
-  async function connect() {
-    const result = await request('/api/learning/drafts');
+  function mergeRemote(result) {
     if (typeof result.epoch !== 'string' || !Array.isArray(result.records)) throw Error('Resposta de rascunhos inválida.');
     const remote = result.records.map(validateDraft);
     if (epoch && result.epoch !== epoch) {
@@ -45,6 +44,7 @@ export function createDraftStore({request, storage, uid = () => crypto.randomUUI
     connected = true; failure = ''; cache();
     if(list().some(row=>row.dirty))schedule();
   }
+  async function connect() { mergeRemote(await request('/api/learning/drafts')); }
   const ready = connect().catch(error=>{ failure = error.message; emit(); return false; });
   function status() {
     const pending = [...records.values()].some(row=>row.dirty);
@@ -82,6 +82,10 @@ export function createDraftStore({request, storage, uid = () => crypto.randomUUI
           saved = await request('/api/learning/drafts',{epoch,revision:0,data:fork.data});
           row=fork;
           const oldRemote = await request('/api/learning/drafts');
+          if(oldRemote.epoch!==epoch) {
+            mergeRemote(oldRemote);
+            throw Error('O banco foi restaurado durante o salvamento. Recupere sua cópia anterior em Aprender → Retomar um rascunho.');
+          }
           for (const record of oldRemote.records.map(validateDraft)) if (!records.has(record.id)) records.set(record.id,record);
         }
         saved = validateDraft(saved);
@@ -102,6 +106,7 @@ export function createDraftStore({request, storage, uid = () => crypto.randomUUI
     try { return await busy; } finally { busy=null;if(!list().some(row=>row.dirty)){clearTimeout(timer);timer=null;}emit(); }
   }
   return {ready,list,current,set,flush,status,
+    subscribe(listener) { if(typeof listener!=='function')throw TypeError('Observador inválido.');listeners.add(listener);return ()=>listeners.delete(listener); },
     select(id) { const row=records.get(id); if(row)selected.set(row.data.key,id); return row; },
     get archived() { return copy(archived); },
     recoverArchived(index) { const row=archived[index]; if(!row)return null; const ident=uid(); const restored={...row,id:ident,revision:0,updated:new Date().toISOString(),dirty:true,data:{...row.data,id:ident}}; records.set(ident,restored); selected.set(restored.data.key,ident); archived.splice(index,1); cache();schedule();return restored; }

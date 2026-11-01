@@ -1,5 +1,6 @@
 #vocabulary-dialog{width:min(960px,96vw);max-height:92dvh;overflow:auto;padding:0;background:var(--bg);color:var(--ink);border:1px solid var(--line)}
 #vocabulary-dialog button,#vocabulary-dialog select{font:inherit}
+#vocabulary-dialog :is([data-vocab-status],[role=alert],select):focus-visible{outline:2px solid var(--theme-focus,var(--blue));outline-offset:3px}
 .vocab-header{display:flex;gap:20px;align-items:flex-start;padding:26px 30px 20px;border-bottom:1px solid var(--line)}
 .vocab-header>div{flex:1;min-width:0}.vocab-header>button{padding:5px 8px;font-size:calc(18px * var(--font-scale,1));color:var(--muted)}
 .vocab-header small{font-size:calc(9px * var(--font-scale,1));letter-spacing:1.3px;color:var(--blue)}

@@ -43,12 +43,32 @@ export function backupSummaryHTML(summary) {
   return `<p class="backup-created">Criado em ${esc(dateLabel(summary.created))}</p><dl class="backup-counts">${[['Páginas','pages'],['Blocos','blocks'],['Anexos','attachments'],['Revisões no histórico','history'],['Rascunhos de estudo','drafts']].map(([label,key])=>`<div><dt>${label}</dt><dd>${number(summary[key])}</dd></div>`).join('')}</dl><p class="backup-note">Anexos: ${esc(sizeLabel(Number.isFinite(summary.attachmentBytes)?summary.attachmentBytes:0))}. O histórico conserva sua ordem; os números de revisão serão ajustados neste computador.</p>`;
 }
 
+export function backupDraftNoticeHTML(state={}) {
+  const count=Number.isSafeInteger(state?.archived)&&state.archived>0?state.archived:0;
+  return `<aside class="backup-draft-notice"><strong>Quais rascunhos entram no backup?</strong><p>O ZIP inclui os rascunhos gravados neste computador. As cópias anteriores guardadas só no navegador ficam fora.${count?` Há ${count} ${count===1?'cópia anterior disponível':'cópias anteriores disponíveis'} nesta janela.`:''} Em Aprender a escrever → Retomar um rascunho, recupere e salve as cópias que deseja incluir. Você pode ignorar as duplicadas.</p><button class="backup-secondary" type="button" data-backup-review-drafts>Conferir rascunhos de estudo</button></aside>`;
+}
+
+export function backupCompletionHTML(value,{reloadRequired=false}={}) {
+  if(typeof value?.id!=='string'||!/^[a-f0-9]{32}$/.test(value.id))throw Error('Identificação da cópia anterior inválida.');
+  return `<section class="backup-complete"><div class="backup-step">RESTAURAÇÃO CONCLUÍDA</div><h3>${reloadRequired?'Seu backup foi restaurado':'Seu backup está aberto'}</h3><p>Notas, anexos, histórico e rascunhos foram restaurados. A sincronização está desligada. Confira seu conteúdo antes de conectar outro computador.</p><a class="backup-primary" href="/api/full-backup/recovery/${value.id}" download="trama-copia-anterior.zip">Baixar a cópia anterior</a><p class="backup-note">A cópia anterior também está guardada neste computador:</p><code>${esc(typeof value.path==='string'?value.path:'Pasta full-backups dos dados do Trama')}</code>${value.preferencesSaved===false?'<p class="backup-error">O navegador não permitiu guardar todas as preferências de aparência. As notas foram restauradas.</p>':''}${reloadRequired?'<p class="backup-note">O navegador não permitiu guardar este aviso para depois de recarregar. Baixe a cópia anterior agora, se desejar; depois, atualize a janela para abrir as notas restauradas.</p>':''}<div class="backup-actions"><button class="backup-secondary" ${reloadRequired?'data-backup-reload':'data-backup-close'}>${reloadRequired?'Atualizar e abrir notas restauradas':'Conferir minhas notas'}</button></div></section>`;
+}
+
+/** Reload only after the recovery link can survive it; otherwise keep it visible. */
+export function completeBackupRestore(value,{storage,reload,show}) {
+  let stored=false;
+  try{storage.setItem(RECEIPT,JSON.stringify(value));stored=true;}catch{try{storage?.removeItem(RECEIPT);}catch{}}
+  if(stored)reload();else show(value);
+  return stored;
+}
+
 export function setupBackup(ctx) {
   const dialog=document.createElement('dialog');dialog.id='backup-dialog';dialog.setAttribute('aria-labelledby','backup-title');document.body.append(dialog);
-  let sequence=0,busy=false,restoring=false,selected=null,preview=null,controller=null,held=false;
+  let sequence=0,busy=false,restoring=false,needsReload=false,selected=null,preview=null,controller=null,held=false;
   const $=selector=>dialog.querySelector(selector);
   const hold=()=>{if(!held){held=true;ctx.syncHold?.(dialog);}};
   const release=()=>{if(held){held=false;ctx.syncRelease?.(dialog);}};
+  const draftNotice=()=>backupDraftNoticeHTML(ctx.draftBackupState?.());
+  const refreshDraftNotice=()=>{const box=$('[data-backup-drafts]');if(box)box.innerHTML=draftNotice();};
   const message=(text,error=false)=>{const box=$('[data-backup-message]');if(box){box.textContent=text;box.classList.toggle('backup-error',error);box.setAttribute('role',error?'alert':'status');}};
   const setBusy=(value,isRestore=false)=>{busy=value;restoring=value&&isRestore;dialog.setAttribute('aria-busy',String(value));dialog.querySelectorAll('button,input').forEach(node=>{node.disabled=value;});};
   const ready=async()=>{if(ctx.flushDrafts&&!await ctx.flushDrafts())throw Error('Há rascunhos de estudo ainda não salvos. Volte à aprendizagem e resolva o aviso antes de continuar.');if(!await ctx.flush())throw Error('Há notas ainda não salvas. Resolva o aviso de salvamento antes de continuar.');const local=ctx.localState?.()||{};if(local.dirty||local.saving||local.conflict||local.ready===false)throw Error('As alterações desta janela precisam ser salvas antes de continuar.');};
@@ -60,24 +80,29 @@ export function setupBackup(ctx) {
   function saveBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
   function fileData(file,signal){return new Promise((resolve,reject)=>{const reader=new FileReader();const abort=()=>reader.abort();reader.onerror=()=>reject(Error('Não foi possível ler este arquivo.'));reader.onabort=()=>reject(new DOMException('Leitura cancelada','AbortError'));reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onloadend=()=>signal.removeEventListener('abort',abort);signal.addEventListener('abort',abort,{once:true});reader.readAsDataURL(file);});}
   function cancelWork(){sequence++;controller?.abort();controller=null;selected=null;preview=null;busy=false;release();}
-  function close(){if(restoring)return;dialog.close();}
+  function close(){if(restoring||needsReload)return;dialog.close();}
   dialog.addEventListener('close',cancelWork);
-  dialog.addEventListener('cancel',event=>{if(restoring)event.preventDefault();});
+  dialog.addEventListener('cancel',event=>{if(restoring||needsReload)event.preventDefault();});
   dialog.addEventListener('keydown',event=>event.stopPropagation());
-  dialog.addEventListener('click',event=>{event.stopPropagation();if(event.target.closest('[data-backup-close]'))close();});
+  dialog.addEventListener('click',event=>{event.stopPropagation();if(event.target.closest('[data-backup-close]'))close();if(event.target.closest('[data-backup-review-drafts]')&&!busy&&!needsReload){close();document.dispatchEvent(new CustomEvent('trama:learn',{detail:{}}));}});
   window.addEventListener('beforeunload',event=>{if(restoring){event.preventDefault();event.returnValue='';}});
   function shell(body){dialog.innerHTML=`<header class="backup-head"><div><p>SEUS DADOS, COM VOCÊ</p><h2 id="backup-title">Backup completo</h2></div><button type="button" data-backup-close aria-label="Fechar backup">✕</button></header><div class="backup-body">${body}<p data-backup-message role="status" aria-live="polite"></p></div>`;}
+  function showCompletion(value,reloadRequired=false){
+    needsReload=reloadRequired;hold();shell(backupCompletionHTML(value,{reloadRequired}));
+    if(reloadRequired){$('[data-backup-close]').hidden=true;$('[data-backup-reload]').onclick=()=>{restoring=false;location.reload();};}
+    if(!dialog.open)dialog.showModal();dialog.scrollTop=0;
+  }
   function open(){
-    if(restoring)return;cancelWork();hold();
+    if(restoring||needsReload)return;cancelWork();hold();
     const main=document.querySelector('#modal');if(main?.open)main.close();
-    shell(`<p>Guarde notas, anexos, histórico e rascunhos de estudo em um único arquivo. Ele pode ser restaurado no Windows ou no Linux.</p><section class="backup-section"><div class="backup-step">01 · GUARDAR</div><h3>Levar uma cópia com você</h3><p>Inclui aparência, idioma e palavras aceitas deste navegador. Credenciais, programas instalados e caminhos deste computador ficam fora.</p><button class="backup-primary" data-backup-export>Baixar backup completo</button><p class="backup-note">O arquivo contém suas notas e não tem senha. Guarde-o em um local privado. Limite: 256 MB de conteúdo, até 5.000 anexos e o histórico disponível de até 100 revisões.</p></section><section class="backup-section"><div class="backup-step">02 · RECUPERAR</div><h3>Restaurar uma cópia</h3><p>Primeiro, confira o conteúdo. A restauração só começa depois da sua confirmação e guarda uma cópia completa do estado atual.</p><label class="backup-file">Arquivo de backup completo (.zip)<input type="file" accept=".zip,application/zip" data-backup-file></label><p class="backup-note">Este formato é diferente da exportação de notas ou do cofre antigo.</p><div data-backup-preview></div></section>`);
+    shell(`<p>Guarde notas, anexos, histórico e rascunhos de estudo em um único arquivo. Ele pode ser restaurado no Windows ou no Linux.</p><div data-backup-drafts>${draftNotice()}</div><section class="backup-section"><div class="backup-step">01 · GUARDAR</div><h3>Levar uma cópia com você</h3><p>Inclui aparência, idioma e palavras aceitas deste navegador. Credenciais, programas instalados e caminhos deste computador ficam fora.</p><button class="backup-primary" data-backup-export>Baixar backup completo</button><p class="backup-note">O arquivo contém suas notas e não tem senha. Guarde-o em um local privado. Limite: 256 MB de conteúdo, até 5.000 anexos e o histórico disponível de até 100 revisões.</p></section><section class="backup-section"><div class="backup-step">02 · RECUPERAR</div><h3>Restaurar uma cópia</h3><p>Primeiro, confira o conteúdo. A restauração só começa depois da sua confirmação e guarda uma cópia completa do estado atual.</p><label class="backup-file">Arquivo de backup completo (.zip)<input type="file" accept=".zip,application/zip" data-backup-file></label><p class="backup-note">Este formato é diferente da exportação de notas ou do cofre antigo.</p><div data-backup-preview></div></section>`);
     if(!dialog.open)dialog.showModal();dialog.scrollTop=0;
     $('[data-backup-export]').onclick=download;
     $('[data-backup-file]').onchange=()=>{selected=$('[data-backup-file]').files[0]||null;preview=null;if(selected)void inspect();};
   }
   async function download(){
     if(busy)return;const owner=++sequence;controller=new AbortController();setBusy(true);message('Salvando as alterações e preparando o arquivo…');
-    try{await ready();if(owner!==sequence)return;const blob=await request('export',{preferences:readBackupPreferences(browserStorage())},{binary:true,signal:controller.signal});if(owner!==sequence)return;saveBlob(blob,`trama-backup-${new Date().toISOString().slice(0,10)}.zip`);message('Arquivo preparado. Confira o download no seu navegador.');}
+    try{await ready();if(owner!==sequence)return;refreshDraftNotice();const blob=await request('export',{preferences:readBackupPreferences(browserStorage())},{binary:true,signal:controller.signal});if(owner!==sequence)return;saveBlob(blob,`trama-backup-${new Date().toISOString().slice(0,10)}.zip`);message('Arquivo preparado. Confira o download no seu navegador. Cópias anteriores guardadas só no navegador não foram incluídas.');}
     catch(error){if(owner===sequence&&error.name!=='AbortError')message(error.message,true);}
     finally{if(owner===sequence)setBusy(false);}
   }
@@ -85,7 +110,7 @@ export function setupBackup(ctx) {
     if(busy||!selected)return;const owner=++sequence;controller=new AbortController();preview=null;setBusy(true);message('Salvando as alterações e verificando a integridade do backup…');$('[data-backup-preview]').innerHTML='';
     try{
       if(selected.size>MAX_ARCHIVE)throw Error('O arquivo excede 260 MB. Escolha um backup completo dentro do limite.');
-      await ready();if(owner!==sequence)return;
+      await ready();if(owner!==sequence)return;refreshDraftNotice();
       const data=await fileData(selected,controller.signal);if(owner!==sequence)return;
       const inspected=await request('inspect',{data,revision:ctx.revision},{signal:controller.signal});if(owner!==sequence)return;
       preview={...inspected,data};
@@ -103,17 +128,17 @@ export function setupBackup(ctx) {
       if(owner!==sequence)return;
       let preferencesSaved=true;if(restorePreferences)preferencesSaved=applyBackupPreferences(browserStorage(),result.preferences);
       const receipt={id:result.recoveryId,path:result.recoveryPath,preferencesSaved};
-      try{sessionStorage.setItem(RECEIPT,JSON.stringify(receipt));}catch{}
       document.dispatchEvent(new CustomEvent('trama:backup-restored',{bubbles:true,detail:{revision:result.revision}}));
       // Reset graph undo, learning draft epochs and browser preference caches.
-      restoring=false;location.reload();
+      let storage;try{storage=sessionStorage;}catch{}
+      completeBackupRestore(receipt,{storage,reload:()=>{restoring=false;location.reload();},show:value=>showCompletion(value,true)});
     }catch(error){if(owner===sequence){preview=null;const area=$('[data-backup-preview]');area.innerHTML='<p>Confira o estado atual antes de tentar novamente. A cópia anterior, quando criada, permanece na pasta full-backups dos dados do Trama.</p><button class="backup-secondary" data-backup-reinspect>Inspecionar novamente</button>';$('[data-backup-reinspect]').onclick=inspect;message(error.status===409?'O estado atual mudou desde a verificação. Inspecione novamente para confirmar a nova situação.':`${error.message} Se a conexão caiu durante a restauração, recarregue a página antes de continuar.`,true);}}
     finally{if(owner===sequence)setBusy(false);}
   }
   function receipt(){
     let value;try{value=JSON.parse(sessionStorage.getItem(RECEIPT));sessionStorage.removeItem(RECEIPT);}catch{return;}
     if(!value||typeof value.id!=='string'||!/^[a-f0-9]{32}$/.test(value.id))return;
-    hold();shell(`<section class="backup-complete"><div class="backup-step">RESTAURAÇÃO CONCLUÍDA</div><h3>Seu backup está aberto</h3><p>Notas, anexos, histórico e rascunhos foram restaurados. A sincronização está desligada. Confira seu conteúdo antes de conectar outro computador.</p><a class="backup-primary" href="/api/full-backup/recovery/${value.id}" download="trama-copia-anterior.zip">Baixar a cópia anterior</a><p class="backup-note">A cópia anterior também está guardada neste computador:</p><code>${esc(typeof value.path==='string'?value.path:'Pasta full-backups dos dados do Trama')}</code>${value.preferencesSaved===false?'<p class="backup-error">O navegador não permitiu guardar todas as preferências de aparência. As notas foram restauradas.</p>':''}<div class="backup-actions"><button class="backup-secondary" data-backup-close>Conferir minhas notas</button></div></section>`);dialog.showModal();
+    showCompletion(value);
   }
   document.addEventListener('click',event=>{if(event.target.closest('[data-full-backup-open]')){event.preventDefault();void open();}});
   receipt();

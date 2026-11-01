@@ -1,6 +1,7 @@
 import * as C from './core.js';
 import {prepareTranslation, restoreTranslation, saveTranslatedCopy, addVocabularyCard, validateTranslationText} from './translation-core.js';
 import {maskMarkup, applySuggestion, isProtectedRange} from './proofread.js';
+import {translationPracticeLesson, translationDraftSession, TRANSLATION_PRACTICE_LIMIT} from './translation-drafts.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const languages = {pt:'Português', en:'English'};
@@ -16,11 +17,25 @@ export function setupTranslation(ctx) {
   dialog.id = 'translation-dialog';
   dialog.setAttribute('aria-label','Tradução e prática de escrita');
   document.body.append(dialog);
-  let session = null, sequence = 0, controller = null, cache = new Map(), activePractice = null;
+  let session = null, sequence = 0, practiceSequence = 0, controller = null, cache = new Map(), activePractice = null;
+  const drafts = ctx.learningDrafts;
   const $ = selector => dialog.querySelector(selector);
 
-  function stop() { sequence++; controller?.abort(); controller=null; }
-  dialog.addEventListener('close',stop);
+  function stop() { captureDraft(); sequence++; practiceSequence++; controller?.abort(); controller=null; }
+  function updateDraftStatus(error='') {
+    const label=$('#practice-draft-status');
+    if(label && activePractice)label.textContent=error || (activePractice.draft.archived ? 'O banco de notas mudou. Esta tentativa está nas cópias anteriores em Aprender → Retomar um rascunho. Uma nova edição cria outro rascunho.' : activePractice.draft.current() ? drafts.status().message : 'Escreva sua tentativa para começar o rascunho.');
+  }
+  function captureDraft({input=false}={}) {
+    const field=$('#practice-attempt');
+    if(!field || !activePractice)return null;
+    try { const row=activePractice.draft.capture(field.value,{input});updateDraftStatus();return row; }
+    catch(error) { updateDraftStatus(error.message);return null; }
+  }
+  drafts.subscribe(()=>updateDraftStatus());
+  dialog.addEventListener('close',()=>{stop();void drafts.flush();activePractice=null;});
+  window.addEventListener('pagehide',()=>{captureDraft();void drafts.flush();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){captureDraft();void drafts.flush();}});
   // Keep note editor shortcuts from changing the graph while practicing.
   dialog.addEventListener('keydown',event=>event.stopPropagation());
   dialog.addEventListener('click',event=>event.stopPropagation());
@@ -51,7 +66,7 @@ export function setupTranslation(ctx) {
     if(!page){ctx.toast('Abra uma página para traduzir.');return;}
     stop();ctx.finishEditing();activePractice=null;
     const token=sequence;
-    session={target,source:target==='pt'?'en':'pt',prepared:prepareTranslation(page),translated:null,saved:false,cards:new Map(),drafts:new Map()};
+    session={target,source:target==='pt'?'en':'pt',prepared:prepareTranslation(page),translated:null,saved:false,cards:new Map(),lessons:new Map()};
     const working=session;
     shell(target,page.title);
     $('#translation-status').textContent='Verificando o tradutor local…';
@@ -110,7 +125,7 @@ export function setupTranslation(ctx) {
       catch(error){ctx.toast(error.message);}
     };
     dialog.querySelectorAll('[data-save-vocab]').forEach(button=>button.onclick=async()=>{button.disabled=true;const row=session.rows[Number(button.dataset.saveVocab)],result=await saveVocabulary(row.original,row.translation,row.id);if(result)button.textContent=result==='saved'?'Frase guardada':'Cartão criado · salvamento pendente';else button.disabled=false;});
-    dialog.querySelectorAll('[data-practice]').forEach(button=>button.onclick=()=>practice(Number(button.dataset.practice)));
+    dialog.querySelectorAll('[data-practice]').forEach(button=>button.onclick=()=>practice(Number(button.dataset.practice)).catch(error=>ctx.toast(error.message)));
     $('#study-word-translate').onclick=translateWord;
     $('#study-word-save').onclick=async()=>{const button=$('#study-word-save');button.disabled=true;const result=await saveVocabulary($('#study-word-original').value,$('#study-word-translation').value);if(result)$('#study-word-status').textContent=result==='saved'?'✓ Expressão guardada no seu vocabulário.':'Cartão criado; confira o aviso de salvamento antes de fechar.';else button.disabled=false;};
     for(const field of ['#study-word-original','#study-word-translation'])$(field).oninput=()=>{$('#study-word-save').disabled=false;};
@@ -140,19 +155,37 @@ export function setupTranslation(ctx) {
     finally{if(token===sequence)button.disabled=false;}
   }
 
-  function practice(index) {
-    const row=session.rows[index];activePractice={row,index,check:0};
+  async function practice(index) {
+    captureDraft();
+    const working=session,row=working.rows[index],token=sequence,opening=++practiceSequence;
+    if(!working.lessons.has(index))working.lessons.set(index,translationPracticeLesson({target:working.target,pageId:working.prepared.pageId,pageTitle:working.prepared.page.title,blockId:row.id,original:row.original,translation:row.translation}));
+    let lesson;
+    try {lesson=await working.lessons.get(index);} catch(error){working.lessons.delete(index);throw error;}
+    if(token!==sequence || opening!==practiceSequence || working!==session)return;
+    captureDraft();
+    const practiceState=activePractice={row,index,check:0,draft:translationDraftSession(drafts,lesson)};
     const panel=$('#translation-practice');panel.hidden=false;
     panel.innerHTML=`<div class="study-practice-head"><h3>Agora é a sua vez</h3><button id="practice-close" aria-label="Fechar prática">✕</button></div><p>Reescreva este trecho em ${languages[session.target]}. Depois revele uma tradução possível e compare suas escolhas.</p><blockquote class="study-prose">${readable(row.original)}</blockquote><label for="practice-attempt">Sua versão em ${languages[session.target]}</label><textarea id="practice-attempt" rows="4" maxlength="20000" lang="${session.target==='pt'?'pt-BR':'en-US'}" spellcheck="true" placeholder="Escreva do seu jeito…"></textarea><div class="study-row-actions"><button class="primary" id="practice-reveal">Revelar tradução para comparar</button><button class="secondary" id="practice-proofread">Revisar minha escrita</button></div><div id="practice-reference" hidden><h4>Uma tradução possível</h4><p class="study-prose" lang="${session.target}">${readable(row.translation)}</p><p class="translation-note">Compare a ordem das palavras, as expressões e os conectivos. Uma diferença não significa um erro.</p></div><div id="practice-feedback" role="status" aria-live="polite"></div>`;
     // Hide the reference translation for this row during the exercise.
     const sourceRow=dialog.querySelectorAll('.translation-reading article')[index];
     dialog.querySelectorAll('.practice-hidden').forEach(el=>el.classList.remove('practice-hidden'));
     sourceRow?.classList.add('practice-hidden');
-    $('#practice-close').onclick=()=>{panel.hidden=true;sourceRow?.classList.remove('practice-hidden');activePractice=null;};
+    const draftInfo=document.createElement('div');
+    draftInfo.innerHTML='<p id="practice-draft-status" class="translation-note" role="status" aria-live="polite"></p><p class="translation-note">Ao reabrir o aplicativo, use Aprender → Retomar um rascunho. A origem e a tradução de referência ficam junto da sua tentativa, sem precisar traduzir novamente.</p><div class="study-row-actions"><button class="secondary" id="practice-save-draft">Salvar rascunho agora</button><button class="secondary" id="practice-resume">Continuar em Aprender</button></div>';
+    $('#practice-attempt').after(draftInfo);
+    $('#practice-close').onclick=()=>{captureDraft();void drafts.flush();practiceSequence++;panel.hidden=true;sourceRow?.classList.remove('practice-hidden');activePractice=null;};
     $('#practice-reveal').onclick=()=>{$('#practice-reference').hidden=false;sourceRow?.classList.remove('practice-hidden');};
     $('#practice-proofread').onclick=proofPractice;
-    $('#practice-attempt').value=session.drafts.get(row.id)||'';
-    $('#practice-attempt').oninput=()=>session.drafts.set(row.id,$('#practice-attempt').value);
+    $('#practice-attempt').value=practiceState.draft.text;
+    $('#practice-attempt').oninput=()=>captureDraft({input:true});
+    $('#practice-save-draft').onclick=async()=>{captureDraft();await drafts.flush();if(practiceState===activePractice)updateDraftStatus();};
+    $('#practice-resume').onclick=()=>{const saved=captureDraft();if(!saved){ctx.toast('Escreva sua tentativa para continuar em Aprender.');return;}dialog.close();document.dispatchEvent(new CustomEvent('trama:learn',{detail:{draftId:saved.id}}));};
+    updateDraftStatus();
+    // The local field is usable immediately, even while the first disk read waits.
+    void drafts.ready.then(()=>{
+      if(practiceState!==activePractice || token!==sequence || opening!==practiceSequence)return;
+      captureDraft();$('#practice-attempt').value=practiceState.draft.refresh();updateDraftStatus();
+    });
     $('#practice-attempt').focus();
     panel.scrollIntoView({behavior:'smooth',block:'start'});
   }
@@ -168,7 +201,7 @@ export function setupTranslation(ctx) {
       if($('#practice-attempt').value!==snapshot){$('#practice-feedback').textContent='Sua versão mudou durante a revisão. Clique em revisar novamente.';return;}
       const matches=(result.matches||[]).filter(match=>!isProtectedRange(snapshot,match.offset,match.length));
       $('#practice-feedback').innerHTML=matches.length?matches.map((match,index)=>`<article class="proof-match"><p>${esc(match.message)}</p><div class="proof-context">${esc(snapshot.slice(Math.max(0,match.offset-40),match.offset))}<mark>${esc(snapshot.slice(match.offset,match.offset+match.length))}</mark>${esc(snapshot.slice(match.offset+match.length,match.offset+match.length+40))}</div><div class="study-row-actions">${(match.replacements||[]).slice(0,4).map((replacement,r)=>`<button class="secondary" data-practice-fix="${index}" data-replacement="${r}">${esc(replacement.value||'Remover')}</button>`).join('')}</div></article>`).join(''):'<p class="translation-ready">Nenhum problema encontrado pelas regras locais. Isso não avalia se a tradução manteve o sentido.</p>';
-      dialog.querySelectorAll('[data-practice-fix]').forEach(button=>button.onclick=()=>{try{const match=matches[Number(button.dataset.practiceFix)];$('#practice-attempt').value=applySuggestion($('#practice-attempt').value,match,match.replacements[Number(button.dataset.replacement)].value,snapshot);session.drafts.set(practiceState.row.id,$('#practice-attempt').value);proofPractice();}catch(error){ctx.toast(error.message);}});
+      dialog.querySelectorAll('[data-practice-fix]').forEach(button=>button.onclick=()=>{try{const match=matches[Number(button.dataset.practiceFix)],revised=applySuggestion($('#practice-attempt').value,match,match.replacements[Number(button.dataset.replacement)].value,snapshot);if(revised.length>TRANSLATION_PRACTICE_LIMIT)throw Error('Esta sugestão ultrapassaria o limite de 20.000 caracteres da prática.');$('#practice-attempt').value=revised;captureDraft({input:true});proofPractice();}catch(error){ctx.toast(error.message);}});
     } catch(error){if(token===sequence&&practiceState===activePractice)$('#practice-feedback').textContent=error.message;}
     finally{if(token===sequence&&practiceState===activePractice)$('#practice-proofread').disabled=false;}
   }
@@ -184,5 +217,5 @@ export function setupTranslation(ctx) {
     if(button){event.preventDefault();open(button.dataset.translatePage).catch(error=>ctx.toast(error.message));}
     if(event.target.closest('[data-vocabulary-open]'))openVocabulary();
   });
-  return {open};
+  return {open,flushDrafts:async()=>{captureDraft();return drafts.flush();}};
 }

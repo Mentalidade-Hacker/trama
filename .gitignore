@@ -11,6 +11,7 @@
 /backups/
 /full-backups/
 /.full-backup-restore.json
+/.full-backup-restore-*.tmp
 /.full-backup-old-config-*.json
 /.full-backup-rollback-*.json
 /sync/

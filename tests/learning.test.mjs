@@ -93,7 +93,7 @@ test('metadata and readable examples do not activate graph commands, refs or lin
 
 test('invalid attempts and invalid quiz choices leave the graph untouched', () => {
   const data=graph(), before=JSON.stringify(data);
-  for(const sentence of ['', '   ', 'x'.repeat(12001)]) assert.throws(()=>savePractice(data,lesson,sentence,{now}));
+  for(const sentence of ['', '   ', 'x'.repeat(20001)]) assert.throws(()=>savePractice(data,lesson,sentence,{now}));
   for(const choice of [-1,4,0.5,'0']) assert.throws(()=>answerQuiz(data,lesson,choice,{now}));
   assert.throws(()=>savePractice(data,{...lesson,language:'fr'},'phrase',{now}));
   assert.throws(()=>markLessonSeen(data,lesson,{now:'invalid'}));
@@ -125,6 +125,15 @@ test('correction reference is persisted only through an explicit action', () => 
   assert.equal(card.state.lesson.after,'os textos');
   assert.equal(card.state.attempts,0);
   assert.equal(dueReviews(data,'pt',now).length,1);
+});
+
+test('long translation practice keeps all 20000 UTF16 units in portable graph metadata', () => {
+  const data=graph(),original='🙂'.repeat(10000);
+  const result=savePractice(data,lesson,original,{now});
+  const attempt=result.block.children.find(block=>block.text.startsWith('Minha escrita ·'));
+  assert.equal(readPracticeAttempt(attempt).text,original);
+  const restored=readLearning(C.importData(JSON.stringify(data))).cards.get(lesson.id);
+  assert.equal(readPracticeAttempt(restored.block.children.find(block=>block.text.startsWith('Minha escrita ·'))).text,original);
 });
 
 test('review requires revealing the reference and schedules self-assessment honestly', () => {

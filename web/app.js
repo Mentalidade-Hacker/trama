@@ -415,10 +415,16 @@ window.addEventListener('focus',()=>{liveSync.activity();void liveSync.poll();})
 window.addEventListener('pagehide',()=>{liveSync.stop();syncUI?.stop();});
 window.addEventListener('pageshow',e=>{if(e.persisted){liveSync.start();syncUI?.start();}});
 syncUI=setupSync(featureContext);
-setupTranslation(featureContext);
 setupDictionary(featureContext);
 const learningUI=setupLearning(featureContext);
-featureContext.flushDrafts=()=>learningUI.flushDrafts();
+featureContext.learningDrafts=learningUI.drafts;
+const translationUI=setupTranslation(featureContext);
+featureContext.flushDrafts=async()=>{
+  const translationSaved=await translationUI.flushDrafts();
+  const learningSaved=await learningUI.flushDrafts();
+  return translationSaved&&learningSaved;
+};
+featureContext.draftBackupState=()=>({archived:learningUI.drafts.archived.length});
 setupVocabulary(featureContext);
 setupBackup(featureContext);
 setupLiveWriting(featureContext);

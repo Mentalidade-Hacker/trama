@@ -18,6 +18,32 @@ function validRange(text, offset, length) {
     && !splitSurrogate(text, offset) && !splitSurrogate(text, offset + length);
 }
 
+/** Scan inline Markdown links once, including nested parentheses in destinations. */
+export function markdownLinks(text) {
+  assertText(text);
+  const markers=/!?\[|\]|\r|\n/g,links=[];
+  let match,start=-1,labelStart=-1;
+  while((match=markers.exec(text))) {
+    if(match[0]==='\r'||match[0]==='\n'){start=-1;continue;}
+    if(match[0]!==']'){
+      if(start<0){start=match.index;labelStart=markers.lastIndex;}
+      continue;
+    }
+    if(start<0)continue;
+    if(text[match.index+1]!=='('){start=-1;continue;}
+    let end=match.index+2,depth=1;
+    while(end<text.length&&depth){
+      if(text[end]==='\\'){end=Math.min(end+2,text.length);continue;}
+      if(text[end]==='(')depth++;
+      else if(text[end]===')')depth--;
+      end++;
+    }
+    links.push({start,labelStart,labelEnd:match.index,end});
+    markers.lastIndex=end;start=-1;
+  }
+  return links;
+}
+
 /** Half-open ranges [start,end] containing note syntax that must not be corrected. */
 export function protectedRanges(text) {
   assertText(text);
@@ -25,21 +51,13 @@ export function protectedRanges(text) {
   const add = (start, end) => { if (end > start) ranges.push([start, end]); };
 
   // Nested page links/directives, including unfinished syntax while editing.
-  for (const [open, close] of [['[[', ']]'], ['{{', '}}']]) {
-    let from = 0;
-    while (from < text.length) {
-      const start = text.indexOf(open, from);
-      if (start < 0) break;
-      let cursor = start + open.length, depth = 1;
-      while (depth && cursor < text.length) {
-        const nextOpen = text.indexOf(open, cursor), nextClose = text.indexOf(close, cursor);
-        if (nextClose < 0) { cursor = text.length; break; }
-        if (nextOpen >= 0 && nextOpen < nextClose) { depth++; cursor = nextOpen + open.length; }
-        else { depth--; cursor = nextClose + close.length; }
-      }
-      add(open === '[[' && text[start - 1] === '#' ? start - 1 : start, cursor);
-      from = cursor;
+  for (const [open, markers] of [['[[', /\[\[|\]\]/g], ['{{', /\{\{|\}\}/g]]) {
+    let match,depth=0,start=0;
+    while((match=markers.exec(text))){
+      if(match[0]===open){if(depth===0)start=match.index;depth++;}
+      else if(depth&&--depth===0)add(open==='[['&&text[start-1]==='#'?start-1:start,markers.lastIndex);
     }
+    if(depth)add(open==='[['&&text[start-1]==='#'?start-1:start,text.length);
   }
 
   // Inline code and fenced code. Preserve all text until a matching backtick run.
@@ -63,8 +81,10 @@ export function protectedRanges(text) {
   }
 
   // Attribute names are page links; only their values are natural language.
-  for (const match of text.matchAll(/^([ \t]*)(\[\[[^\[\]\r\n]+\]\]|[^:\r\n]+?)::[ \t]*/gmu)) {
-    if (!/[`{}#]/u.test(match[2])) add(match.index, match.index + match[0].length);
+  for (const line of text.matchAll(/^[^\r\n]+/gm)) {
+    const indent=/^[ \t]*/.exec(line[0])[0].length;
+    const match=/^(\[\[[^\[\]]+\]\]|[^:]+?)::[ \t]*/u.exec(line[0].slice(indent));
+    if (match&&!/[`{}#]/u.test(match[1])) add(line.index, line.index + indent + match[0].length);
   }
   for (const match of text.matchAll(/^[ \t]{0,3}#{1,6}[ \t]+|<%(?:today|tomorrow|yesterday)%>/gm)) {
     add(match.index, match.index + match[0].length);
@@ -80,16 +100,7 @@ export function protectedRanges(text) {
   }
 
   // A Markdown label is natural language; only its delimiters/destination are protected.
-  for (const match of text.matchAll(/!?\[([^\]\r\n]+)\]\(/g)) {
-    const start = match.index, labelStart = start + (match[0].startsWith('!') ? 2 : 1);
-    const destination = start + match[0].length - 2;
-    let end = destination + 2, depth = 1;
-    while (end < text.length && depth) {
-      if (text[end] === '\\') { end = Math.min(end + 2, text.length); continue; }
-      if (text[end] === '(') depth++;
-      else if (text[end] === ')') depth--;
-      end++;
-    }
+  for (const {start,labelStart,labelEnd:destination,end} of markdownLinks(text)) {
     add(start, labelStart);
     add(destination, end);
   }

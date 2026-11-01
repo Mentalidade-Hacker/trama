@@ -64,7 +64,7 @@ def validate_data(value):
     if value.get('key') != key:
         raise ValueError("A atividade não corresponde à lição do rascunho.")
     result = {name: value[name] for name in ('id', 'tab', 'language')}
-    result.update(key=key, lesson=lesson, text=text(value.get('text')))
+    result.update(key=key, lesson=lesson, text=text(value.get('text'), 20000))
     if len(json.dumps(result, ensure_ascii=False).encode('utf-8')) > MAX_RECORD:
         raise ValueError("O rascunho excede 128 KB.")
     return result

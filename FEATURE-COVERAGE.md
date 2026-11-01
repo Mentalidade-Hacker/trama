@@ -1,4 +1,4 @@
-# Cobertura funcional — Trama 0.9
+# Cobertura funcional — Trama 0.9.1
 
 Este documento descreve os arquivos entregues. **Completo no escopo** indica que o fluxo local descrito está implementado, sem afirmar equivalência integral com o Roam. **Parcial** lista diferenças. **Ausente** significa não incluído. Não há porcentagem de paridade.
 
@@ -90,8 +90,9 @@ Arch Linux, instaladores nativos, transferência real com conta Proton não fora
 
 Comparação somente de leitura com contagens e amostras, confirmação vinculada à versão comparada, tentativas com espera progressiva, nome do computador, horários de eventos separados, detecção de servidor indisponível e proteção durante composição de texto. O transporte Proton verifica conteúdo remoto antes de ignorar arquivos existentes e confirma uploads. Modo manual não realiza rede ao verificar a pasta. Testes com conta Proton real permanecem pendentes.
 
-## Aprendizagem e recuperação na 0.9
+## Aprendizagem e recuperação na 0.9 e 0.9.1
 
-- Rascunhos de Aprender a escrever: gravação no navegador e SQLite, recuperação ao reabrir, versões separadas em conflito e inclusão no novo backup completo. São locais; práticas explicitamente guardadas e cartões continuam no grafo sincronizado.
+- Rascunhos de Aprender a escrever e do exercício de tradução: gravação no navegador e SQLite, recuperação ao reabrir, versões separadas em conflito e inclusão no backup completo. A tradução preserva origem e referência sem depender de nova consulta. São locais; práticas explicitamente guardadas e cartões continuam no grafo sincronizado.
 - Explorar palavras: repetições e alternativas opcionais de 40 famílias autorais PT/EN. Aceitar uma ocorrência guarda o cartão para revisão. Não é análise semântica nem avaliação automática da qualidade da escrita.
 - Backup completo: notas, anexos, histórico disponível, rascunhos e preferências permitidas, com inspeção, confirmação e cópia prévia. Limites explícitos e sincronização desligada após restaurar.
+- Correções da 0.9.1: análise de marcações longas sem as buscas quadráticas reproduzidas; contagem real com até 40 ocorrências exibidas; cartões e entradas de vocabulário podem ser indentados sem perder sua identidade; publicação atômica do registro de restauração e preservação do link de recuperação quando o armazenamento do navegador falha.

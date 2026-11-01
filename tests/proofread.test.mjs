@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { maskMarkup, protectedRanges, isProtectedRange, applySuggestion } from '../web/proofread.js';
+import { maskMarkup, protectedRanges, isProtectedRange, applySuggestion, markdownLinks } from '../web/proofread.js';
 
 test('mask preserves UTF-16 length, emoji offsets and line breaks', () => {
   const text = '😀 Eu vai a [[São Paulo 😀]].\nThey is ready. #trabalho';
@@ -12,6 +12,27 @@ test('mask preserves UTF-16 length, emoji offsets and line breaks', () => {
   assert.ok(!masked.includes('São Paulo'));
   const offset = text.indexOf('vai');
   assert.equal(applySuggestion(text, { offset, length: 3 }, 'vou', text), '😀 Eu vou a [[São Paulo 😀]].\nThey is ready. #trabalho');
+});
+
+test('Markdown scanner preserves prose labels and masks balanced or unfinished destinations',()=>{
+  for(const text of ['[good [label](https://example.test/a(b)) outside','![label](a\\)b) outside','[label]([nested](unfinished','[](destination) outside']){
+    const links=markdownLinks(text);assert.equal(links.length,1);
+    const link=links[0],masked=maskMarkup(text);
+    assert.equal(masked.length,text.length);
+    assert.equal(masked.slice(link.labelStart,link.labelEnd),text.slice(link.labelStart,link.labelEnd));
+    assert.equal(masked.slice(link.labelEnd,link.end).trim(),'');
+  }
+  assert.equal(markdownLinks('[not a link] [good](destination)').length,1);
+});
+
+test('deep nesting and long incomplete Markdown stay protected without repeated suffix scans',()=>{
+  const started=performance.now();
+  for(const text of ['[['.repeat(50000)+']]'.repeat(50000),'{{'.repeat(50000)+'}}'.repeat(50000),'[label]('.repeat(25000)]){
+    const ranges=protectedRanges(text);assert.ok(ranges.length);
+    assert.ok(ranges.some(([start,end])=>start<=text.length-1&&end===text.length));
+  }
+  assert.deepEqual(protectedRanges(' '.repeat(200000)),[]);
+  assert.ok(performance.now()-started<5000,'200k-character syntax must not require quadratic work.');
 });
 
 test('all graph syntax and code are protected, including nested/incomplete markup', () => {

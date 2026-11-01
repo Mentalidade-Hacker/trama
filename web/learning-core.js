@@ -46,7 +46,7 @@ export function readPracticeAttempt(block) {
   if (!child) return null;
   try {
     const record = JSON.parse(child.text.slice(ATTEMPT_PREFIX.length, -4));
-    if (record.version !== 1 || typeof record.text !== 'string' || record.text.length > 12000 || !record.createdAt) return null;
+    if (record.version !== 1 || typeof record.text !== 'string' || record.text.length > 20000 || !record.createdAt) return null;
     return {text: record.text, createdAt: iso(record.createdAt)};
   } catch { return null; }
 }
@@ -67,7 +67,7 @@ function decode(block) {
 
 export function readLearning(data) {
   const page = C.findPage(data, LEARNING_PAGE), cards = new Map();
-  if (page) for (const block of page.blocks) {
+  if (page) for (const {block} of C.walkBlocks([page])) {
     const parsed = decode(block);
     if (!parsed) continue;
     const card = {page, block, ...parsed};
@@ -170,7 +170,7 @@ export function answerQuiz(data, input, choice, options = {}) {
 }
 
 export function savePractice(data, lesson, sentence, options = {}) {
-  sentence = text(sentence);
+  sentence = text(sentence, 20000);
   if (!sentence.trim()) throw Error('Escreva uma frase ou um pequeno parágrafo antes de guardar.');
   return operation(data, lesson, options, (card, now) => {
     card.state.attempts++;

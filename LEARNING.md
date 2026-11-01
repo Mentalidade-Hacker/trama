@@ -30,15 +30,15 @@ Os verbetes do Wikcionário/Wiktionary continuam com sua atribuição e licença
 
 Significados podem variar conforme o contexto. As alternativas das lições incluem observações de uso; não são uma lista de substituições automáticas.
 
-## Rascunhos recuperáveis na versão 0.9
+## Rascunhos recuperáveis na versão 0.9.1
 
 O campo **Uma frase que seja sua**, em **Aprender a escrever**, salva cada alteração no navegador e, após uma pausa curta, no banco deste computador. O aviso abaixo do campo diferencia cópia no navegador, confirmação no disco e falha. Ao abrir a aprendizagem novamente, o último rascunho com texto é retomado; **Retomar um rascunho** permite escolher outro. **Salvar rascunhos agora** tenta novamente se houve falha.
 
 Os rascunhos incluem o contexto da atividade, inclusive palavras consultadas e correções. São distintos de **Guardar minha prática**: o salvamento automático não cria tentativas nem atribui progresso. Duas janelas que alteram o mesmo rascunho preservam versões separadas. Apagar o texto de uma atividade salva esse campo vazio, sem ressuscitar a versão anterior.
 
-Os rascunhos são locais e entram no **backup completo da 0.9**. Eles não entram nos snapshots de sincronização das notas. Para levar uma prática ao outro computador pelo Proton, use **Guardar minha prática**; o registro passa a integrar o grafo sincronizado. O campo separado de exercício no painel de tradução mantém o comportamento da versão anterior e não faz parte deste salvamento automático.
+Os rascunhos são locais e entram no **backup completo**. Eles não entram nos snapshots de sincronização das notas. Para levar uma prática ao outro computador pelo Proton, use **Guardar minha prática**; o registro passa a integrar o grafo sincronizado. Na 0.9.1, o exercício do painel de tradução também salva automaticamente. Sua tentativa, o original e a tradução de referência aparecem em **Retomar um rascunho**, sem precisar traduzir novamente. **Continuar em Aprender** abre a atividade correspondente.
 
-Limites: 12.000 unidades UTF-16 por texto (um emoji pode contar como duas), 2.000 rascunhos e 16 MB de dados no total. A cópia do navegador prioriza rascunhos pendentes e guarda até 50 cópias já confirmadas; todos os confirmados continuam no banco. Navegação privada, limpeza de dados do navegador ou falta de espaço podem impedir essa camada de recuperação. Se o aviso disser que nenhuma gravação foi confirmada, mantenha a janela aberta e copie o texto. Depois de restaurar outro backup, cópias antigas do navegador só voltam mediante escolha explícita.
+Limites: 20.000 unidades UTF-16 por tentativa (um emoji pode contar como duas), 12.000 por campo de referência, 128 KB por registro, 2.000 rascunhos e 16 MB de dados no total. Referências de tradução maiores são abreviadas com aviso; a identidade considera o texto completo, evitando confundir origens diferentes. A cópia do navegador prioriza rascunhos pendentes e guarda até 50 cópias já confirmadas; todos os confirmados continuam no banco. Navegação privada, limpeza de dados do navegador ou falta de espaço podem impedir essa camada de recuperação. Se o aviso disser que nenhuma gravação foi confirmada, mantenha a janela aberta e copie o texto. Depois de restaurar outro backup, cópias antigas do navegador só voltam mediante escolha explícita.
 
 ## Sugestões a partir da sua escrita
 

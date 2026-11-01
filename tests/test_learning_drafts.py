@@ -40,9 +40,18 @@ class DraftTests(unittest.TestCase):
         self.save();self.save(draft(''),1)
         self.assertEqual(self.store.drafts.read()['records'][0]['data']['text'],'')
 
+    def test_translation_length_round_trips_and_lesson_limits_stay_separate(self):
+        value=draft('🙂'*10000)
+        saved=self.save(value)
+        self.assertEqual(Store(self.path).drafts.read()['records'][0]['data']['text'],value['text'])
+        self.assertEqual(LearningDrafts.validate_backup([saved])[0],saved)
+        value['lesson']['before']='x'*12001
+        with self.assertRaises(ValueError):self.save(value,1)
+        self.assertEqual(self.store.drafts.read()['records'],[saved])
+
     def test_limits_and_invalid_types_do_not_erase_prior_text(self):
         before=self.save()
-        for change in ({'text':'🙂'*6001},{'text':None},{'id':'../x'},{'language':'en'},{'key':'wrong'},{'lesson':{}},{'tab':'bogus'}):
+        for change in ({'text':'🙂'*10001},{'text':None},{'id':'../x'},{'language':'en'},{'key':'wrong'},{'lesson':{}},{'tab':'bogus'}):
             value=draft();value.update(change)
             with self.assertRaises((ValueError,UnicodeError)):self.save(value,1)
         for revision in (True,-1,1.5,'1'):

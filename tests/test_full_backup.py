@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sqlite3
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -271,6 +272,89 @@ class FullBackupTests(unittest.TestCase):
         reopened = Store(self.target.directory)
         self.assertEqual(reopened.sync.configuration(), target)
         self.assertFalse(reopened.full_backup.journal.exists())
+
+    def test_process_interrupted_while_writing_journal_keeps_database_openable(self):
+        archive = self.root / "source-backup.zip"
+        archive.write_bytes(self.raw)
+        before = self.snapshot()
+        script = '''
+import base64, os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from server import Store
+store = Store(sys.argv[2])
+backup = store.full_backup
+data = base64.b64encode(Path(sys.argv[3]).read_bytes()).decode()
+inspection = backup.inspect({"revision": store.revision(), "data": data})
+write = backup._write
+def interrupted(path, content):
+    if path == backup.journal or path.name.startswith(".full-backup-restore-"):
+        with path.open("xb") as target:
+            target.write(content[:19])
+            target.flush()
+            os.fsync(target.fileno())
+        os._exit(39)
+    return write(path, content)
+backup._write = interrupted
+backup.restore({"revision": store.revision(), "data": data, "inspection": inspection["inspection"]})
+'''
+        process = subprocess.run([sys.executable, "-c", script, str(Path(__file__).resolve().parents[1]), str(self.target.directory), str(archive)], capture_output=True, timeout=20)
+        self.assertEqual(process.returncode, 39, process.stderr.decode(errors="replace"))
+        reopened = Store(self.target.directory)
+        self.assertEqual(reopened.read(), before["graph"])
+        self.assertEqual(reopened.drafts.read(), before["drafts"])
+        self.assertEqual(reopened.features.list(), before["attachments"])
+        self.assertFalse(reopened.full_backup.journal.exists())
+        staging = list(self.target.directory.glob(".full-backup-restore-*.tmp"))
+        self.assertEqual(len(staging), 1)
+        self.assertEqual(staging[0].stat().st_size, 19)
+
+    def test_failed_journal_publication_keeps_original_data_and_removes_own_staging(self):
+        before = self.snapshot()
+        replace = __import__("os").replace
+        def fail(source, destination):
+            if Path(destination) == self.backup.journal:
+                raise PermissionError("simulated rename failure")
+            return replace(source, destination)
+        with patch("full_backup.os.replace", side_effect=fail), self.assertRaises(PermissionError):
+            self.restore()
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(self.backup.journal.exists())
+        self.assertEqual(list(self.target.directory.glob(".full-backup-restore-*.tmp")), [])
+        self.assertEqual(Store(self.target.directory).read(), before["graph"])
+
+    def test_journal_staging_collision_preserves_existing_file(self):
+        ident = uuid.uuid4()
+        path = self.target.directory / f".full-backup-restore-{ident.hex}.tmp"
+        path.write_bytes(b"Preexisting temporary content")
+        with patch("full_backup.uuid.uuid4", return_value=ident), self.assertRaises(FileExistsError):
+            self.backup._publish_journal({"token": ident.hex})
+        self.assertEqual(path.read_bytes(), b"Preexisting temporary content")
+        self.assertFalse(self.backup.journal.exists())
+
+    def test_directory_fsync_failure_after_publish_recovers_before_another_configuration(self):
+        self.target.sync._save_config()
+        before = self.snapshot()
+        # Inject the POSIX directory-fsync failure at the same point on every OS.
+        # The complete journal has already been renamed into place here.
+        def fail_sync():
+            self.assertTrue(self.backup.journal.is_file())
+            self.assertIn("token", json.loads(self.backup.journal.read_bytes()))
+            raise OSError("simulated directory fsync failure")
+        with patch.object(self.backup, "_sync_directory", side_effect=fail_sync), self.assertRaises(OSError):
+            self.restore()
+        self.assertEqual(self.snapshot(), before)
+        self.assertFalse(self.backup.journal.exists())
+        self.assertEqual(list(self.target.directory.glob(".full-backup-restore-*.tmp")), [])
+        exchange = self.root / "new-exchange"
+        exchange.mkdir()
+        self.target.sync.configure({"folder": str(exchange), "deviceName": "Nova configuração"})
+        expected = self.target.sync.configuration()
+        reopened = Store(self.target.directory)
+        self.assertEqual(reopened.sync.configuration(), expected)
+        # Retrying in the same process also starts from a clean journal.
+        self.restore()
+        self.assertEqual(self.target.read()["data"], self.source.read()["data"])
 
     def test_failed_journal_cleanup_is_retryable_and_never_deletes_committed_attachments(self):
         original_unlink = Path.unlink

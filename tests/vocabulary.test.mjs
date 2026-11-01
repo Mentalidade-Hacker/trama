@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as C from '../web/core.js';
 import {readLearning,recordReview,dueReviews,validateLesson} from '../web/learning-core.js';
 import {VOCABULARY_FAMILIES} from '../web/vocabulary-data.js';
-import {SUGGESTED_VOCABULARY_PAGE,vocabularyTokens,scanVocabulary,vocabularyChoice,prepareVocabularyChange,commitVocabularyChange,createVocabularyWriter} from '../web/vocabulary-suggestions.js';
+import {SUGGESTED_VOCABULARY_PAGE,vocabularyTokens,scanVocabulary,vocabularyChoice,prepareVocabularyChange,commitVocabularyChange,createVocabularyWriter,setupVocabulary} from '../web/vocabulary-suggestions.js';
 
 const now='2026-11-01T12:00:00.000Z';
 function fixture(text='Este resultado é importante. Outro resultado importante merece atenção.'){
@@ -150,4 +150,80 @@ test('missing vocabulary entry prevents partial commit or a false successful ret
   const ctx=writerContext(f,[true,false,true]),writer=createVocabularyWriter(ctx);await assert.rejects(writer.commit(select(f),{now}));
   assert.ok(C.findPage(f.data,SUGGESTED_VOCABULARY_PAGE));f.data.pages=f.data.pages.filter(page=>page.title!==SUGGESTED_VOCABULARY_PAGE);
   await assert.rejects(writer.retry(),/cartão mudou/);assert.equal(writer.pending,null);
+});
+
+test('200k-character scans are bounded before rendering and retain the actual occurrence count',()=>{
+  const f=fixture('good '.repeat(40000)),started=performance.now();
+  const result=scanVocabulary(f.data,{pageId:f.page.id,language:'en'}),group=result.groups.find(item=>item.word==='good');
+  assert.equal(result.characters,200000);assert.equal(group.count,40000);assert.equal(group.occurrences.length,40);
+  assert.equal(group.occurrences.at(-1).offset,39*5);assert.equal(group.reason,'repetition');
+  assert.ok(performance.now()-started<5000,'A bounded scan should not perform quadratic work.');
+});
+
+test('long words, bracket runs, nested links and long whitespace do not cause quadratic scanning',()=>{
+  const started=performance.now();
+  for(const text of ['x'.repeat(200000),'['.repeat(200000),'[['.repeat(50000)+']]'.repeat(50000),'[good]('.repeat(28571),' '.repeat(200000)]){
+    const tokens=vocabularyTokens(text,'en');
+    assert.ok(!tokens.some(token=>token.normalized==='good'));
+  }
+  assert.ok(performance.now()-started<5000,'These 200k-character inputs should complete in bounded time.');
+});
+
+test('emails with sentence punctuation and nested Markdown labels remain protected',()=>{
+  const tokens=vocabularyTokens('good@site.example. [good [good](https://host.example/a(b)) good','en');
+  assert.deepEqual(tokens.map(token=>token.word),['good']);
+});
+
+test('the 200k boundary cannot turn an incomplete word into an applicable occurrence',()=>{
+  for(const suffix of ['123','_item','-thing',"'s",'𐐀']){
+    const f=fixture(' '.repeat(199996)+'good'+suffix),result=scanVocabulary(f.data,{pageId:f.page.id,language:'en'});
+    assert.ok(result.truncated);assert.ok(!result.groups.some(group=>group.word==='good'));
+  }
+  const f=fixture(' '.repeat(199995)+'good𐐀');
+  assert.ok(!scanVocabulary(f.data,{pageId:f.page.id,language:'en'}).groups.some(group=>group.word==='good'));
+  assert.throws(()=>scanVocabulary(f.data,{pageId:f.page.id,blockId:'deleted',language:'en'}),/não está mais/);
+});
+
+test('indented vocabulary entries and review cards retain identity, deduplication and schedule',()=>{
+  const f=fixture('Um ponto importante. Outro ponto importante.');
+  const first=prepareVocabularyChange(f.data,select(f),{now});commitVocabularyChange(f.data,first);
+  recordReview(f.data,first.lessonId,'remembered',{now,revealed:true});
+  const card=readLearning(f.data).cards.get(first.lessonId),due=card.state.dueAt;
+  const library=C.findPage(f.data,SUGGESTED_VOCABULARY_PAGE),entry=C.findBlock(f.data,first.vocabularyBlockId).block;
+  const vocabularyFolder=C.newBlock('Organização pessoal'),reviewFolder=C.newBlock('Palavras que estou estudando');
+  vocabularyFolder.children=[entry];library.blocks=[vocabularyFolder];reviewFolder.children=[card.block];card.page.blocks=[reviewFolder];
+  assert.equal(readLearning(f.data).cards.get(first.lessonId).block.id,card.block.id);
+  const second=prepareVocabularyChange(f.data,select(f),{now:'2026-11-02T12:00:00Z'});commitVocabularyChange(f.data,second);
+  assert.equal(second.vocabularyBlockId,first.vocabularyBlockId);assert.equal(second.cardBlockId,first.cardBlockId);
+  const saved=readLearning(f.data).cards.get(first.lessonId);assert.equal(saved.state.dueAt,due);assert.equal(saved.state.repetitions,1);
+  assert.equal(C.walkBlocks(f.data.pages).filter(({block})=>block.text===first.vocabularyMarker).length,1);
+});
+
+function browserFixture(t){
+  const old=new Map(),listeners=new Map(),nodes=[];
+  const override=(name,value)=>{old.set(name,Object.getOwnPropertyDescriptor(globalThis,name));Object.defineProperty(globalThis,name,{configurable:true,writable:true,value});};
+  const document={activeElement:null,body:{append(){}},addEventListener(){}};
+  const matches=(node,selector)=>selector.split(',').some(part=>{const match=/^\[([^=\]]+)(?:="([^"]*)")?\]$/.exec(part);return match&&node.hasAttribute(match[1])&&(match[2]===undefined||node.getAttribute(match[1])===match[2]);});
+  const element=attributes=>({attributes,disabled:Object.hasOwn(attributes,'disabled'),dataset:Object.fromEntries(Object.entries(attributes).filter(([name])=>name.startsWith('data-')).map(([name,value])=>[name.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()),value])),hasAttribute(name){return Object.hasOwn(attributes,name);},getAttribute(name){return attributes[name];},focus(){document.activeElement=this;},matches(selector){return matches(this,selector);},closest(selector){return matches(this,selector)?this:null;},append(){}});
+  let html='';
+  const dialog={open:false,setAttribute(){},addEventListener(name,fn){listeners.set(name,fn);},contains(node){return nodes.includes(node);},querySelector(selector){return this.querySelectorAll(selector)[0]||null;},querySelectorAll(selector){return nodes.filter(node=>matches(node,selector));},showModal(){this.open=true;this.querySelector('[data-vocab-close]')?.focus();},close(){this.open=false;listeners.get('close')?.();},get innerHTML(){return html;},set innerHTML(value){html=value;nodes.length=0;for(const match of html.matchAll(/<(?:button|select|input|div|p)\b([^>]*)>/g)){const attributes={};for(const attr of match[1].matchAll(/([\w-]+)(?:="([^"]*)")?/g))attributes[attr[1]]=attr[2]??'';nodes.push(element(attributes));}document.activeElement=null;}};
+  document.createElement=tag=>tag==='dialog'?dialog:element({});
+  override('document',document);override('localStorage',{getItem:()=>null});
+  t.after(()=>{for(const [name,descriptor] of old){if(descriptor)Object.defineProperty(globalThis,name,descriptor);else delete globalThis[name];}});
+  return {document,dialog,click(node){node.focus();listeners.get('click')({target:node,stopPropagation(){}});}};
+}
+
+test('dialog rerenders retain keyboard focus and occurrence labels keep complete emoji',async t=>{
+  const browser=browserFixture(t),f=fixture('🙂'+'x'.repeat(23)+' importante '+'x'.repeat(38)+'🙂. Uma boa ideia.');
+  const ctx={...writerContext(f,[]),page:f.page,language:()=> 'pt',toast(){}};
+  const ui=setupVocabulary(ctx);ui.open();
+  assert.ok(browser.dialog.innerHTML.isWellFormed());
+  const group=browser.dialog.querySelector('[data-vocab-group="1"]');assert.ok(group);browser.click(group);
+  assert.equal(browser.document.activeElement.getAttribute('data-vocab-group'),'1');
+  browser.click(browser.dialog.querySelector('[data-vocab-group="0"]'));
+  browser.click(browser.dialog.querySelector('[data-vocab-apply="relevante"]'));
+  assert.ok(browser.document.activeElement.hasAttribute('data-vocab-status'));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(browser.document.activeElement.hasAttribute('data-vocab-status'));
+  assert.match(browser.dialog.innerHTML,/guardada em Meu vocabulário/);
 });
