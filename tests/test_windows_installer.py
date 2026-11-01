@@ -181,9 +181,14 @@ class InstallerTests(unittest.TestCase):
             home=root/'Home with spaces';data=root/'Data with spaces';home.mkdir();(data/'trama').mkdir(parents=True)
             (data/'trama'/'trama.db').write_bytes(b'keep graph')
             env={**os.environ,'HOME':home.as_posix(),'XDG_DATA_HOME':data.as_posix(),'PATH':str(tools)+os.pathsep+os.environ['PATH']}
+            if os.name=='nt':
+                # Prove that the shell itself cannot initialize before skipping.
+                # An installer failure after a successful preflight must fail.
+                preflight=subprocess.run([str(bash),'-c','exit 0'],env=env,capture_output=True,text=True,timeout=15)
+                if preflight.returncode & 0xffffffff == 0xc0000142:
+                    self.skipTest('Git Bash cannot initialize even for exit 0 (Windows loader status 0xC0000142); the real installer still runs when preflight succeeds and on Linux CI.')
+                self.assertEqual(preflight.returncode,0,'Git Bash preflight failed: '+preflight.stdout+preflight.stderr)
             result=subprocess.run([str(bash),str(source/'install.sh')],env=env,capture_output=True,text=True,timeout=30)
-            if os.name=='nt' and 'NtCreateDirectoryObject' in result.stderr and '0xC0000022' in result.stderr:
-                self.skipTest('This Windows host blocks Git Bash initialization; the same test runs on Linux CI.')
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             destination=data/'trama'/'app'
             for name in ('learning_drafts.py','full_backup.py','future_module.py','launch_trama.py','updater.py','app-release.json'):

@@ -66,14 +66,18 @@ class UpdateApiTests(unittest.TestCase):
         self.assertEqual(self.request('/api/app/close', own)[0], 409)
         self.assertFalse(self.server.close_requested);self.assertTrue(self.thread.is_alive())
 
-    def test_close_requires_ready_update_and_launcher(self):
+    def test_close_requires_managed_launcher_and_valid_revision(self):
         body = {'revision':0,'client':'own-window'}
-        self.updates.state = 'downloading'
-        self.assertEqual(self.request('/api/app/close', body)[0], 409)
-        self.updates.state = 'ready';self.server.can_close = False
+        self.server.can_close = False
         self.assertEqual(self.request('/api/app/close', body)[0], 409)
         self.assertEqual(self.request('/api/app/close', {'revision':True,'client':'own-window'})[0], 400)
         self.assertFalse(self.server.close_requested)
+
+    def test_close_without_pending_update_stops_managed_app(self):
+        self.updates.state = 'current'
+        code,result = self.request('/api/app/close', {'revision':0,'client':'own-window'})
+        self.assertEqual(code,200);self.assertTrue(result['ok'])
+        self.thread.join(timeout=3);self.assertFalse(self.thread.is_alive())
 
     def test_close_after_saved_revision_preserves_graph_and_stops_server(self):
         self.store.save(0, {'version':1,'pages':[{'id':'page','title':'Saved note','created':'2026-11-01','updated':'2026-11-01','blocks':[]}]})

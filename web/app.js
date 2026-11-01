@@ -4,7 +4,7 @@ import {renderComponent,bindComponents,renderMath} from './components.js';
 import {setupFeatures,commands} from './features.js';
 import {parseOutline,markdownPages} from './outline.js';
 import {setupSync} from './sync-ui.js';
-import {createSyncClient,bindSyncActivity} from './sync-client.js';
+import {createSyncClient,bindSyncActivity,bindDraftActivity} from './sync-client.js';
 import {setupTranslation} from './translation-ui.js';
 import {setupLiveWriting} from './live-writing.js';
 import {setupDictionary} from './dictionary-ui.js';
@@ -419,6 +419,7 @@ syncUI=setupSync(featureContext);
 setupDictionary(featureContext);
 const learningUI=setupLearning(featureContext);
 featureContext.learningDrafts=learningUI.drafts;
+bindDraftActivity(liveSync,learningUI.drafts);
 const translationUI=setupTranslation(featureContext);
 featureContext.flushDrafts=async()=>{
   const translationSaved=await translationUI.flushDrafts();

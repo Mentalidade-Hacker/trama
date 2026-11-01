@@ -85,8 +85,10 @@ def stop_child(child):
 
 
 def run_child(root, base, args, health=None, token=None, on_started=None, timeout=BOOT_TIMEOUT):
-    child = subprocess.Popen([sys.executable, '-B', str(root / 'server.py'), *args],
-                             env=child_environment(base, health, token))
+    environment = child_environment(base, health, token)
+    hidden = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' and environment.get('TRAMA_NATIVE_LAUNCHER') == '1' else {}
+    child = subprocess.Popen([sys.executable, '-E', '-s', '-B', '-X', 'utf8', str(root / 'server.py'), *args],
+                             env=environment, **hidden)
     started = health is None
     deadline = time.monotonic() + timeout
     try:

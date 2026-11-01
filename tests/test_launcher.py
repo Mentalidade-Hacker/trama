@@ -1,9 +1,11 @@
 import os
+import json
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import launch_trama as L
@@ -149,6 +151,47 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(env['TRAMA_LAUNCHED'], '1')
         self.assertNotIn('XDG_DATA_HOME', env)
         self.assertNotIn('TRAMA_TRANSLATION_HOME', env)
+
+    def test_real_child_ignores_external_python_home_and_path_but_imports_app_modules(self):
+        untrusted = self.root / 'Unrelated Python modules'
+        untrusted.mkdir()
+        (untrusted / 'trama_external_probe.py').write_text('raise RuntimeError("External module executed")\n')
+        (self.base / 'trama_local_probe.py').write_text('VALUE = "local application module"\n')
+        (self.base / 'server.py').write_text(
+            'import importlib.util,json,sys\nfrom pathlib import Path\nimport trama_local_probe\n'
+            'Path(sys.argv[1]).write_text(json.dumps({"local":trama_local_probe.VALUE,'
+            '"external":importlib.util.find_spec("trama_external_probe") is not None,'
+            '"ignoreEnvironment":sys.flags.ignore_environment,"noUserSite":sys.flags.no_user_site,'
+            '"noBytecode":sys.flags.dont_write_bytecode,"utf8":sys.flags.utf8_mode,'
+            '"arguments":sys.argv[2:]}),encoding="utf-8")\nsys.exit(7)\n', encoding='utf-8')
+        output = self.root / 'child result.json'
+        environment = {'PYTHONHOME':str(self.root / 'Missing Python home'),
+                       'PYTHONPATH':str(untrusted), 'TRAMA_NATIVE_LAUNCHER':'1'}
+        with patch.dict(os.environ, environment):
+            result = L.run_child(self.base, self.base, [str(output), '--data-dir', 'Notes with spaces'])
+        self.assertEqual(result, (7, True))
+        value = json.loads(output.read_text(encoding='utf-8'))
+        self.assertEqual(value, {'local':'local application module','external':False,
+                                'ignoreEnvironment':1,'noUserSite':1,'noBytecode':1,'utf8':1,
+                                'arguments':['--data-dir','Notes with spaces']})
+        self.assertFalse((self.base / '__pycache__').exists())
+
+    def test_hidden_console_flag_is_only_used_for_native_windows_launch(self):
+        flag = 0x08000000  # Windows CREATE_NO_WINDOW; absent on POSIX Python.
+        for platform, native in (('nt','1'),('nt','0'),('nt',None),('posix','1')):
+            with self.subTest(platform=platform,native=native):
+                environment = {} if native is None else {'TRAMA_NATIVE_LAUNCHER':native}
+                child = MagicMock()
+                child.wait.return_value = 7
+                with patch.object(L,'os',SimpleNamespace(name=platform,environ=environment)), \
+                        patch.object(L.subprocess,'CREATE_NO_WINDOW',flag,create=True), \
+                        patch.object(L.subprocess,'Popen',return_value=child) as popen:
+                    self.assertEqual(L.run_child(self.base,self.base,['--no-browser']), (7,True))
+                options = popen.call_args.kwargs
+                if platform == 'nt' and native == '1':
+                    self.assertEqual(options.get('creationflags'),flag)
+                else:
+                    self.assertNotIn('creationflags',options)
 
     def test_real_child_health_handshake_and_exitcode(self):
         code = b'import os,json,pathlib,sys,time\np=pathlib.Path(os.environ["TRAMA_UPDATE_HEALTH_FILE"])\np.write_text(json.dumps({"token":os.environ["TRAMA_UPDATE_HEALTH_TOKEN"]}))\nwhile not p.with_suffix(".ack").exists(): time.sleep(0.01)\nsys.exit(7)\n'

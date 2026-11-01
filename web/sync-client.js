@@ -65,3 +65,21 @@ export function bindSyncActivity(client,root) {
   on('compositionend',finish);on('focusout',finish);
   return ()=>{for(const [type,callback] of listeners)root.removeEventListener(type,callback,true);for(const target of composing)client.release(target);composing.clear();};
 }
+
+/** Drafts use independent disk revisions, so graph cleanliness is insufficient.
+ * Keep the shared learning/translation store leased until its write is confirmed,
+ * including failed writes preserved only in the browser and long idle pauses.
+ */
+export function bindDraftActivity(client,drafts) {
+  const key={drafts:true};let held=false,detached=false;
+  const update=status=>{
+    if(detached)return;
+    const pending=!!(status.pending||status.busy);
+    if(pending===held)return;
+    held=pending;
+    if(held)client.hold(key);else client.release(key);
+  };
+  const unsubscribe=drafts.subscribe(update);
+  update(drafts.status());
+  return ()=>{detached=true;unsubscribe();if(held){held=false;client.release(key);}};
+}

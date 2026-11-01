@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {safeUpdateReleaseURL,normalizeUpdateStatus,updatePresentation,updateStatusHTML,setupUpdates} from '../web/update-ui.js';
+import {safeUpdateReleaseURL,normalizeUpdateStatus,updatePresentation,updateStatusHTML,closeStatusHTML,setupUpdates} from '../web/update-ui.js';
 
 const status=(changes={})=>({currentVersion:'0.10',availableVersion:'0.10.1',automatic:true,state:'current',message:'',downloadedBytes:0,totalBytes:0,releaseUrl:'https://github.com/Mentalidade-Hacker/trama/releases/tag/v0.10.1',checkedAt:'2026-11-01T12:00:00Z',canClose:false,...changes});
 const settle=async()=>{for(let i=0;i<4;i++)await new Promise(resolve=>setImmediate(resolve));};
@@ -37,7 +37,7 @@ test('an installed version is not presented as up to date before its first check
   assert.equal(item.label,'Atualizações do Trama');assert.match(item.message,/segundo plano/);assert.ok(!item.message.includes('mais recente'));
 });
 
-function browser(t,handler,context={}) {
+function browser(t,handler,context={},search='') {
   const old=new Map(),listeners=new Map(),windowListeners=new Map(),requests=[],created=[];
   const override=(key,value)=>{old.set(key,Object.getOwnPropertyDescriptor(globalThis,key));Object.defineProperty(globalThis,key,{configurable:true,writable:true,value});};
   const document={hidden:false,activeElement:null,body:{append(){}},addEventListener:(name,fn)=>listeners.set(name,fn)};
@@ -59,7 +59,7 @@ function browser(t,handler,context={}) {
   }
   const indicator=new Element({'data-update-indicator':'','data-update-open':''});indicator.children=[new Element({'data-update-label':''})];
   document.createElement=()=>{const element=new Element();created.push(element);return element;};document.querySelectorAll=selector=>matches(indicator,selector)?[indicator]:[];
-  override('document',document);override('window',{addEventListener:(name,fn)=>windowListeners.set(name,fn)});
+  override('document',document);override('window',{location:{search},addEventListener:(name,fn)=>windowListeners.set(name,fn)});
   override('fetch',(path,options={})=>{
     const request={path,body:options.body?JSON.parse(options.body):undefined};requests.push(request);
     return new Promise((resolve,reject)=>{
@@ -141,4 +141,35 @@ test('without managed launcher the panel only saves and explains the terminal re
   let saved=0;const b=browser(t,()=>status({state:'ready',canClose:false}),{flush:async()=>{saved++;return true;}});await settle();b.ui.open();await settle();
   assert.equal(b.get('[data-update-exit]').hidden,true);assert.equal(b.get('[data-update-save]').hidden,false);b.get('[data-update-save]').onclick();await settle();
   assert.equal(saved,1);assert.match(b.get('[data-update-feedback]').textContent,/Ctrl\+C/);assert.ok(!b.requests.some(item=>item.path==='/api/app/close'));
+});
+
+test('normal exit is available without an update and saves before closing',async t=>{
+  const order=[];
+  const b=browser(t,request=>request.path==='/api/app/close'?(order.push('close'),{ok:true}):status({state:'current',canClose:true}),{flushDrafts:async()=>{order.push('drafts');return true;},flush:async()=>{order.push('notes');return true;}});
+  await settle();b.ui.openExit();await settle();
+  assert.equal(b.ui.dialog.dataset.exitOnly,'true');assert.equal(b.get('[data-update-exit]').hidden,false);
+  assert.match(b.get('[data-update-status]').innerHTML,/outras janelas/);
+  b.get('[data-update-exit]').onclick();await settle();
+  assert.deepEqual(order,['drafts','notes','close']);assert.match(b.ui.dialog.innerHTML,/quando quiser continuar/);
+  assert.ok(!b.ui.dialog.innerHTML.includes('aplicar a atualização'));
+});
+
+test('tray close URL opens confirmation only and never automatically shuts down',async t=>{
+  const b=browser(t,()=>status({state:'disabled',canClose:true}),{},'?trama-action=close');await settle();
+  assert.equal(b.ui.dialog.open,true);assert.equal(b.ui.dialog.dataset.exitOnly,'true');
+  assert.ok(!b.requests.some(item=>item.path==='/api/app/close'));
+  b.get('[data-update-close]').onclick();assert.equal(b.ui.dialog.open,false);
+});
+
+test('ordinary exit refuses an unsaved draft and retains cancellation',async t=>{
+  const b=browser(t,()=>status({state:'error',canClose:true}),{flushDrafts:async()=>false});await settle();
+  b.ui.openExit();await settle();b.get('[data-update-exit]').onclick();await settle();
+  assert.match(b.get('[data-update-feedback]').textContent,/rascunhos/);assert.equal(b.get('[data-update-close]').disabled,false);
+  assert.ok(!b.requests.some(item=>item.path==='/api/app/close'));
+});
+
+test('normal exit notice escapes errors and only promises a pending update when ready',()=>{
+  const current=closeStatusHTML(status({canClose:true}),'<script>bad</script>');
+  assert.ok(!current.includes('<script>'));assert.ok(!current.includes('atualização já baixada'));
+  assert.match(closeStatusHTML(status({state:'ready',canClose:true})),/atualização já baixada/);
 });

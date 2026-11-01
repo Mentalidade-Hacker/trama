@@ -12,6 +12,28 @@ $helperArguments = @($helperPath, $Operation)
 if ($Source) { $helperArguments += $Source }
 if ($Destination) { $helperArguments += $Destination }
 if ($Cli) { $helperArguments += @('--cli', $Cli) }
+$tramaPython = $null
+if ($env:TRAMA_APP_ROOT) {
+  try {
+    $tramaBase = [IO.Path]::GetFullPath($env:TRAMA_APP_ROOT)
+    $tramaCandidate = [IO.Path]::GetFullPath((Join-Path $tramaBase '..\runtime\python.exe'))
+    if ((Test-Path -LiteralPath (Join-Path $tramaBase 'server.py') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $tramaBase 'launch_trama.py') -PathType Leaf) -and
+        (Test-Path -LiteralPath $tramaCandidate -PathType Leaf)) {
+      $tramaPython = $tramaCandidate
+    }
+  } catch {
+    # An obsolete/invalid base override must not hide the local installation.
+  }
+}
+if (-not $tramaPython) {
+  $tramaCandidate = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\runtime\python.exe'))
+  if (Test-Path -LiteralPath $tramaCandidate -PathType Leaf) { $tramaPython = $tramaCandidate }
+}
+if ($tramaPython) {
+  & $tramaPython -E -s -B @helperArguments
+  exit $LASTEXITCODE
+}
 $launcher = Get-Command py -ErrorAction SilentlyContinue
 if ($launcher) {
   & $launcher.Source -3 @helperArguments

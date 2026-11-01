@@ -1,18 +1,21 @@
-# Trama 0.10
+# Trama 0.10.1
 
 Notas conectadas para uso local no Arch Linux e Windows, inspiradas no fluxo de páginas e blocos do Roam Research. Links, referências vivas, incorporações editáveis, consultas, tabelas, Kanban, templates e anexos ficam em uma base SQLite no seu computador.
 
-As notas funcionam sem conta e sem internet depois de instalados os requisitos. A versão **0.10** acrescenta **download automático de atualizações**, aplicadas quando você encerra e abre o Trama novamente. A consulta de versões usa internet e pode ser desativada. Mantém os rascunhos recuperáveis de aprendizagem e tradução, o dicionário offline, as sugestões de vocabulário com revisão espaçada, o backup completo e a sincronização opcional entre computadores. O tamanho das letras pode ser ajustado de 80% a 200%, com temas claro e escuro. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
+As notas funcionam sem conta e sem internet. A versão **0.10.1 traz um instalador executável para Windows, com Python incluído**: baixe, instale e abra pelo menu Iniciar. Ortografia e dicionário de significados já estão disponíveis localmente. Mantém o download automático de atualizações do aplicativo, os rascunhos recuperáveis, os exercícios de escrita, o backup completo e a sincronização opcional entre computadores. Temas claro/escuro e tamanho de texto de 80% a 200% são ajustáveis. Não reproduz integralmente o Roam e não é um produto oficial da empresa. A comparação concreta está em [FEATURE-COVERAGE.md](FEATURE-COVERAGE.md).
 
 ## Baixar e começar
 
-Use os [pacotes completos na página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest). Eles incluem o dicionário de significados para consulta offline. Use a **0.10 nos dois computadores** para receber o novo fluxo de atualização. A primeira passagem da 0.9.1 ou anterior para a 0.10 é manual; depois, cada instalação pode baixar as próximas versões automaticamente. O formato das cópias de sincronização continua compatível com a 0.7.
+**No Windows, use o instalador EXE. Não é necessário instalar Python separadamente.** O guia [WINDOWS.md](WINDOWS.md) explica os passos, a bandeja e os componentes opcionais.
 
-- [Trama 0.10 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10/trama-v0.10-windows-linux.zip).
-- [Trama 0.10 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10/trama-v0.10-windows-linux.tar.gz).
-- [Hashes SHA-256 da versão 0.10](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10/trama-v0.10-SHA256.txt).
+- [Trama 0.10.1 — instalador para Windows](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-setup.exe).
+- [Trama 0.10.1 — ZIP para Windows e Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-linux.zip).
+- [Trama 0.10.1 — TAR.GZ para Linux](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-windows-linux.tar.gz).
+- [Hashes SHA-256 da versão 0.10.1](https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/trama-v0.10.1-SHA256.txt).
 
-Extraia o pacote. Com **Python 3.10 ou mais recente** e um navegador atual, abra `start.cmd` no Windows ou execute `bash start.sh` no Arch Linux. Os detalhes estão nas seções abaixo. Os pacotes contêm código-fonte e lançadores, não um executável independente do Python.
+O EXE atende Windows 10 ou mais recente, de 64 bits, e inclui um Python privado 3.14.10 da distribuição oficial NuGet. O ZIP/TAR continua disponível para Linux e uso pelo código-fonte; exige **Python 3.10 ou mais recente** e navegador atual. Todos os pacotes completos incluem o dicionário offline. A [página de versões](https://github.com/Mentalidade-Hacker/trama/releases/latest) reúne os arquivos publicados.
+
+Quem usava a 0.10 com Python instalado deve executar o instalador EXE uma vez para obter o novo iniciador Windows. A atualização automática de código não instala o executável nem o Python privado. Preserve seus dados e confira o procedimento em [UPDATES.md](UPDATES.md). O formato das cópias de sincronização continua compatível com a 0.7.
 
 **Se você usar `git clone` ou o botão Code → Download ZIP:** essa cópia contém o código, mas não o arquivo gerado `resources/dictionary.sqlite`, de aproximadamente 494 MB. Para habilitar os significados, copie esse arquivo da pasta `trama/resources` do pacote completo para `resources` da sua cópia, ou execute na raiz do repositório:
 
@@ -26,9 +29,9 @@ Esse comando baixa aproximadamente 572 MB de fontes abertas e reconstrói o dici
 
 Abra **Atualizações** na barra lateral. **Baixar atualizações automaticamente** vem ativado no pacote instalado: o Trama verifica versões estáveis do repositório oficial pouco depois de abrir e, enquanto estiver em execução, a cada seis horas. **Verificar atualização** faz uma consulta manual e pode baixar a nova versão mesmo com a opção automática desligada.
 
-Você pode continuar escrevendo durante o download. Quando aparecer **Atualização pronta para instalar**, use **Salvar e encerrar Trama**, aguarde a confirmação e abra novamente pelo mesmo atalho. O botão confirma as notas e os rascunhos desta janela; se houver conflito ou outra janela sinalizando edição, pede que você resolva antes de encerrar. **Fechar apenas a aba do navegador não encerra o servidor nem instala a atualização.** Se o botão de encerramento não estiver disponível, salve e use `Ctrl+C` no terminal antes de reabrir.
+Você pode continuar escrevendo durante o download. Quando aparecer **Atualização pronta para instalar**, use **Salvar e encerrar Trama**, aguarde a confirmação e abra novamente pelo mesmo atalho. Também há **Encerrar Trama** na barra lateral, mesmo sem atualização pronta, e **Salvar e encerrar…** no ícone da bandeja do Windows. Ambos abrem a confirmação na interface. O salvamento inclui notas e rascunhos desta janela; conflitos ou outra janela sinalizando edição precisam ser resolvidos antes de encerrar. **Fechar apenas a janela não encerra o servidor nem instala a atualização.** No uso pelo terminal, `Ctrl+C` continua disponível depois de salvar.
 
-Desativar a opção impede as próximas verificações automáticas; uma transferência já iniciada pode terminar e um pacote já pronto continua previsto para a próxima abertura. Sem internet, o aplicativo instalado continua disponível. A atualização inclui o programa e seus recursos; não instala Python, Java, LanguageTool, modelos de tradução ou Proton Drive CLI, nem baixa novamente o dicionário de significados. Os dados continuam separados do programa. Consulte [UPDATES.md](UPDATES.md) para a primeira atualização manual, recuperação e limites de segurança.
+Desativar a opção impede as próximas verificações automáticas; uma transferência já iniciada pode terminar e um pacote já pronto continua previsto para a próxima abertura. Sem internet, o aplicativo instalado continua disponível. O download automático atualiza o **código do aplicativo e a interface**. Para atualizar o **Trama.exe ou o Python privado**, execute um instalador EXE mais recente. Java, LanguageTool, modelos de tradução e Proton Drive CLI têm instalação separada; o dicionário de significados já instalado é reutilizado. Consulte [UPDATES.md](UPDATES.md) para recuperação e limites.
 
 ## Escolher a aparência
 
@@ -68,25 +71,19 @@ bash start.sh --data-dir "$HOME/Documentos/minhas-notas-trama"
 
 ## Abrir no Windows
 
-Instale Python 3.10 ou mais recente e extraia o pacote. Abra **start.cmd** para iniciar. **install-windows.cmd** faz a instalação por usuário; não precisa executar como administrador. Os detalhes e destinos aparecem no próprio instalador.
+Baixe o **instalador EXE**, abra-o com dois cliques e siga as telas. A instalação é por usuário, sem exigir Python externo ou execução como administrador. Depois, abra **Trama** no menu Iniciar; um atalho na área de trabalho é opcional.
 
-O servidor usa a mesma aplicação local. `--desktop` procura Edge/Chrome nos locais usuais e, se necessário, abre o navegador padrão. Também é possível usar um terminal:
+O aplicativo abre uma janela usando Edge/Chrome quando disponíveis, ou o navegador padrão. O iniciador e o servidor ficam sem console. O ícone do Trama na bandeja permite reabrir a janela ou pedir **Salvar e encerrar…**. Abrir o mesmo atalho novamente não inicia outro servidor da mesma instalação.
 
-```powershell
-python server.py
-python server.py --desktop
-python server.py --data-dir "D:\Notas\Trama"
-```
+Notas, hierarquia, links, ortografia e dicionário já funcionam. Gramática LanguageTool e tradução local são opcionais; os atalhos **Configurar gramática** e **Configurar tradução**, oferecidos pelo instalador, baixam os componentes necessários usando o Python incluído. O passo a passo, a preservação de dados e a informação sobre assinatura digital estão em [WINDOWS.md](WINDOWS.md).
 
-Fechar a janela do navegador não encerra o servidor. Use `Ctrl+C` no terminal; quando houver uma atualização pronta, o painel **Atualizações** oferece **Salvar e encerrar Trama**. Se já está aberto, volte ao endereço local em vez de iniciar outra cópia.
-
-O pacote contém código-fonte e lançadores; não é um AppImage ou binário independente do Python. O corretor gramatical é opcional e requer LanguageTool/Java.
+O ZIP continua oferecendo `start.cmd` e `install-windows.cmd` para quem prefere o código-fonte com Python externo. Esse fluxo é diferente do instalador EXE.
 
 ## Traduzir e aprender português e inglês
 
 Na página, clique em **Português** para traduzir do inglês ou em **English** para traduzir do português. A tradução aparece em uma tela de estudo, com o título e os blocos da página inteira, inclusive filhos recolhidos. Escolha **Lado a lado** ou **Só tradução**. A página original permanece intacta; **Salvar como nova página** cria uma cópia editável com novos IDs e referências internas remapeadas.
 
-O motor e os modelos precisam ser instalados uma vez: no Windows, abra **setup-translation.cmd**; no Arch, execute **bash setup-translation.sh**. O instalador usa internet para obter as dependências e os modelos; a tradução posterior é local. Consulte [TRANSLATION.md](TRANSLATION.md) para requisitos, tamanho dos downloads e pastas de dados personalizadas.
+O motor e os modelos precisam ser instalados uma vez: na instalação EXE do Windows, abra **Configurar tradução** no menu Iniciar; no ZIP com Python externo, use **setup-translation.cmd**. No Arch, execute **bash setup-translation.sh**. O assistente usa internet para obter as dependências e os modelos; a tradução posterior é local. Consulte [WINDOWS.md](WINDOWS.md) e [TRANSLATION.md](TRANSLATION.md) para requisitos, downloads e pastas de dados personalizadas.
 
 - **Praticar escrita:** esconde a tradução do trecho, permite escrever sua versão e depois revelar uma tradução possível. Diferenças não são classificadas automaticamente como erros.
 - **Revisar minha escrita:** usa o LanguageTool local já integrado para explicar problemas de ortografia/gramática e oferecer sugestões individuais. Não avalia a fidelidade da tradução.
@@ -232,7 +229,7 @@ As cópias usam arquivos ZIP/JSON separados do banco em uso. Não sincronize `tr
 
 A ortografia fica **ativa enquanto você digita**, com dicionários locais incluídos para português BR/PT e inglês US/UK. Abra **Revisão ao digitar** para escolher o idioma. Ao terminar uma palavra ou fazer uma pausa curta, o aplicativo sublinha possíveis problemas e mostra alertas abaixo do campo. Clique no alerta e na sugestão para corrigir; não há substituição silenciosa.
 
-A gramática analisa a frase após uma pausa e usa o LanguageTool local. Ative uma vez abrindo **setup-writing.cmd** no Windows. No Arch, use `sudo pacman -S --needed languagetool` ou `bash setup-writing.sh --portable-java`. O instalador portátil baixa o servidor e Java quando necessário; depois as análises ficam no computador. A primeira análise inicia o motor e pode levar alguns segundos.
+A gramática analisa a frase após uma pausa e usa o LanguageTool local. Na instalação EXE do Windows, abra **Configurar gramática** no menu Iniciar; no ZIP com Python externo, use **setup-writing.cmd**. No Arch, use `sudo pacman -S --needed languagetool` ou `bash setup-writing.sh --portable-java`. O assistente baixa o servidor e Java quando necessário; depois as análises ficam no computador. A primeira análise inicia o motor e pode levar alguns segundos.
 
 O botão **Dicionário** e o atalho **Alt + Shift + D** consultam a palavra selecionada sem internet. O pacote inclui **401.459 entradas em português** e **1.497.827 na edição inglesa completa do Wiktionary**, com definições e exemplos quando disponíveis. Esses números contam entradas por classe/flexão, não palavras únicas. **Guardar significado** adiciona um cartão ao vocabulário com a fonte e a licença.
 
@@ -269,15 +266,15 @@ O servidor escuta apenas em `127.0.0.1`. Limites: 32 MB por gravação, 50 mil p
 
 Os testes automatizados de modelo, consultas, componentes, corretor, armazenamento, ZIP, conflitos e sincronização rodam no ambiente de desenvolvimento Windows. O lançador Windows iniciou o servidor real. No navegador foram exercitados Datalog, fórmula, tabela, Kanban e publicação de snapshot em pasta isolada. A ortografia Hunspell real, a gramática LanguageTool real em PT/EN e o dicionário offline foram verificados, incluindo alertas e correções no navegador. A instalação no Arch, os instaladores no menu nativo e uma transferência real por conta Proton continuam exigindo validação nos respectivos ambientes. Nenhuma conta Proton foi acessada durante o desenvolvimento.
 
-Foi configurado um trabalho de CI que instala os requisitos e executa as suítes dentro de um contêiner Arch Linux. **Essa execução ainda não foi realizada nesta preparação da 0.10**; configurar o trabalho não comprova aprovação no Arch. Os testes do atualizador usam pacotes e respostas controladas para exercitar integridade, interrupção e recuperação. Isso não substitui acompanhar uma atualização real entre duas versões publicadas. Veja a separação entre verificações executadas e pendentes em [RELEASE-v0.10.md](RELEASE-v0.10.md).
+O iniciador nativo da 0.10.1 foi compilado no Windows e passou por **30 verificações locais** de argumentos, seleção do runtime privado, travas e modos dos assistentes. Essas verificações não equivalem à instalação visual completa nem à validação de uma conta Proton. As suítes e os resultados de CI de cada versão devem ser conferidos na publicação correspondente; um contêiner Arch não testa o menu gráfico nativo. Veja [RELEASE-v0.10.1.md](RELEASE-v0.10.1.md) para a separação entre verificações executadas e pendentes.
 
 ```bash
 python -m unittest discover -s tests
 node --test tests/*.test.mjs
 ```
 
-Node.js é usado apenas nos testes de desenvolvimento. A aplicação usa Python padrão e recursos HTML/CSS/JavaScript locais, sem compilação. Bibliotecas e licenças ficam em `web/vendor`.
+Node.js é usado apenas nos testes de desenvolvimento. O núcleo usa Python e recursos HTML/CSS/JavaScript locais. O instalador Windows já contém o iniciador compilado e seu Python privado; quem usa o aplicativo não precisa compilar nada. Bibliotecas e licenças ficam em `web/vendor`. Os checks nativos reproduzíveis estão em `tests/windows_launcher_checks.ps1`.
 
 Não há colaboração multiplayer, aplicativo móvel, compatibilidade com Roam Depot/plugins, criptografia própria dos grafos, autoria multiplayer, todas as extensões Datalog do Roam ou busca semântica. A sincronização automática troca versões completas e pausa quando há divergências; não oferece a edição colaborativa simultânea do Roam. Consulte o [mapa de cobertura](FEATURE-COVERAGE.md).
 
-O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.9.1.md](TESTE-PROTON-0.9.1.md). O relatório anterior permanece disponível em [RELEASE-v0.9.1.md](RELEASE-v0.9.1.md); as mudanças atuais estão em [RELEASE-v0.10.md](RELEASE-v0.10.md).
+O roteiro de validação da sincronização em equipamentos reais está em [TESTE-PROTON-0.10.md](TESTE-PROTON-0.10.md). Os relatórios [0.9.1](RELEASE-v0.9.1.md) e [0.10](RELEASE-v0.10.md) permanecem disponíveis; as mudanças atuais estão em [RELEASE-v0.10.1.md](RELEASE-v0.10.1.md).

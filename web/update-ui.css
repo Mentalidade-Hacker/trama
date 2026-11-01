@@ -1,5 +1,6 @@
 #update-dialog{width:min(650px,calc(100vw - 28px));max-height:calc(100dvh - 36px);padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);font-size:calc(13px * var(--font-scale,1));line-height:1.65;overflow:auto;box-shadow:0 20px 75px #0003}
 #update-dialog::backdrop{background:#1119}
+#update-dialog[data-exit-only="true"] .update-intro,#update-dialog[data-exit-only="true"] .update-versions,#update-dialog[data-exit-only="true"] .update-toggle,#update-dialog[data-exit-only="true"] [data-update-check],#update-dialog[data-exit-only="true"] .update-note,#update-dialog[data-exit-only="true"] .update-footer{display:none}
 .update-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;padding:25px 28px 20px;border-bottom:1px solid var(--line)}
 .update-head>div{min-width:0}
 .update-head h2{margin:3px 0 0;font-size:calc(22px * var(--font-scale,1));line-height:1.3;font-weight:650;overflow-wrap:anywhere}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSyncClient,bindSyncActivity} from '../web/sync-client.js';
+import {createSyncClient,bindSyncActivity,bindDraftActivity} from '../web/sync-client.js';
+import {createDraftStore} from '../web/learning-drafts.js';
 import {safeProtonLoginURL,syncPresentation,syncComparisonHTML,syncReceiveRequest} from '../web/sync-ui.js';
 
 const deferred=()=>{let resolve,reject;const promise=new Promise((yes,no)=>{resolve=yes;reject=no;});return {promise,resolve,reject};};
@@ -79,6 +80,60 @@ test('explicit holds renew edit leases and prevent refresh after the idle delay'
   assert.equal(await f.client.poll(),false);assert.equal(f.leases.at(-1).busy,true);
   f.client.release('comparison');assert.equal(await f.client.poll(),false);
   f.advance(1600);assert.equal(await f.client.poll(),true);
+});
+
+test('an in-flight draft keeps another window from considering its writer idle until disk confirmation',async()=>{
+  const ack=deferred(),started=deferred(),leases=new Map();
+  const a=fixture({client:'draft-window',sendActivity:async body=>leases.set(body.client,body.busy)});
+  const b=fixture({client:'close-window',sendActivity:async body=>leases.set(body.client,body.busy)});
+  let sent;
+  const drafts=createDraftStore({uid:()=> 'pending-draft',delay:1_000_000,request:async(path,body)=>{
+    if(!body)return {epoch:'draft-epoch',records:[]};
+    sent=body;started.resolve();await ack.promise;
+    return {id:body.data.id,revision:1,updated:new Date().toISOString(),data:body.data};
+  }});
+  await drafts.ready;const detach=bindDraftActivity(a.client,drafts);
+  const lesson={id:'practice',kind:'word',language:'pt',word:'clareza',prompt:'Escreva uma frase.'};
+  drafts.set({key:lesson.id,tab:'words',lesson,text:'Ainda está gravando 🙂'});
+  const saving=drafts.flush();await started.promise;
+  // Graphs in both windows are clean, but A's independent draft is not saved.
+  a.advance(20_000);b.advance(20_000);await Promise.all([a.client.poll(),b.client.poll()]);
+  assert.equal(a.state.dirty,false);assert.equal(a.client.busy(),true);
+  assert.equal(leases.get('draft-window'),true);assert.equal(leases.get('close-window'),false);
+  assert.equal(a.applied.length,0);assert.equal(b.applied.length,1);
+  assert.equal(sent.data.text,'Ainda está gravando 🙂');
+  ack.resolve();assert.equal(await saving,true);
+  a.advance(1600);await a.client.poll();
+  assert.equal(a.client.busy(),false);assert.equal(leases.get('draft-window'),false);
+  assert.equal(a.applied.length,1);detach();
+});
+
+test('draft cache recovery and failed saves keep the lease even without fresh typing',async()=>{
+  const f=fixture();let offline=true;
+  const drafts=createDraftStore({uid:()=> 'offline-draft',delay:1_000_000,request:async(path,body)=>{
+    if(!body)return {epoch:'draft-epoch',records:[]};
+    if(offline)throw Error('Disco temporariamente indisponível.');
+    return {id:body.data.id,revision:1,updated:new Date().toISOString(),data:body.data};
+  }});
+  await drafts.ready;
+  const lesson={id:'practice',kind:'writing',language:'en',title:'Practice',prompt:'Write a sentence.'};
+  drafts.set({key:lesson.id,tab:'writing',lesson,text:'Pending before the observer was attached.'});
+  const detach=bindDraftActivity(f.client,drafts);
+  assert.equal(await drafts.flush(),false);f.advance(20_000);await f.client.poll();
+  assert.equal(f.leases.at(-1).busy,true);assert.equal(f.applied.length,0);
+  offline=false;assert.equal(await drafts.flush(),true);f.advance(1600);await f.client.poll();
+  assert.equal(f.leases.at(-1).busy,false);assert.equal(f.applied.length,1);detach();
+});
+
+test('a draft observer also covers busy acknowledgements and can detach without leaking its hold',async()=>{
+  const f=fixture();let listener,current={pending:false,busy:true};
+  const drafts={status:()=>current,subscribe(fn){listener=fn;return ()=>{listener=null;};}};
+  const detach=bindDraftActivity(f.client,drafts);f.advance(20_000);await f.client.poll();
+  assert.equal(f.client.busy(),true);assert.equal(f.leases.at(-1).busy,true);
+  current={pending:false,busy:false};listener(current);f.advance(1600);await f.client.poll();
+  assert.equal(f.client.busy(),false);
+  listener({pending:true,busy:false});detach();f.advance(1600);await f.client.poll();
+  assert.equal(listener,null);assert.equal(f.client.busy(),false);
 });
 
 test('a hold started during state download invalidates that pending result',async()=>{

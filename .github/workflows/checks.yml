@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      verify_published_installer:
+        description: 'Install and verify the exact published Windows EXE for v0.10.1'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -83,3 +89,119 @@ jobs:
           if ($testFiles.Count -eq 0) { throw 'No JavaScript test files found.' }
           & node --test @testFiles
           exit $LASTEXITCODE
+
+  windows-installer:
+    name: Windows installer (real install, fixture dictionary)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up test-controller Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Prepare verified official Windows build tools
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path build/installer-ci -Force | Out-Null
+          $raw = & ./windows/prepare_toolchain.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'trama-windows-toolchain')
+          $toolchain = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+          foreach ($name in @('Runtime', 'Compiler', 'Csc', 'PythonPackageSha256')) {
+            if (-not $toolchain.$name) { throw "Missing toolchain value: $name" }
+          }
+          $toolchain | ConvertTo-Json | Set-Content -LiteralPath build/installer-ci/toolchain.json -Encoding utf8
+
+      - name: Native launcher checks
+        run: |
+          & pwsh -NoProfile -File tests/windows_launcher_checks.ps1 -OutputDirectory build/installer-ci/native-checks 2>&1 | Tee-Object -FilePath build/installer-ci/native-checks.log
+          if ($LASTEXITCODE -ne 0) { throw 'Native launcher checks failed.' }
+
+      - name: Build, install, launch, reinstall and uninstall
+        # Full program/runtime; the two dictionary entries are synthetic fixtures.
+        # The launched app gets no Python on PATH and invalid Python env settings.
+        run: |
+          $tools = Get-Content -LiteralPath build/installer-ci/toolchain.json -Raw | ConvertFrom-Json
+          & python windows/smoke_installer.py --source . --version 0.10.1 --runtime $tools.Runtime --iscc $tools.Compiler --csc $tools.Csc --runtime-package-sha256 $tools.PythonPackageSha256 --work build/installer-ci --report build/installer-ci/smoke-installer-report.json 2>&1 | Tee-Object -FilePath build/installer-ci/smoke-console.log
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer smoke test failed.' }
+
+      - name: Keep installer verification report and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer-fixture-verification
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            build/installer-ci/**/*.log
+            build/installer-ci/*report.json
+            build/installer-ci/toolchain.json
+
+  published-windows-installer:
+    name: Published Windows EXE (v0.10.1 exact artifact)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_published_installer }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out verification scripts
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up test-controller Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Download fixed release asset and verify its published SHA-256
+        # HTTPS and the release checksum share GitHub as their trust boundary;
+        # this is integrity verification, not an independent release signature.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $directory = Join-Path $env:GITHUB_WORKSPACE 'build/published-installer-ci'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          $asset = 'trama-v0.10.1-windows-setup.exe'
+          $base = 'https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.1/'
+          $checksums = Join-Path $directory 'trama-v0.10.1-SHA256.txt'
+          $installer = Join-Path $directory $asset
+          Invoke-WebRequest -Uri ($base + 'trama-v0.10.1-SHA256.txt') -OutFile $checksums
+          $matched = @(Get-Content -LiteralPath $checksums | ForEach-Object {
+            if ($_ -match '^([A-Fa-f0-9]{64})[ \t]+\*?trama-v0\.10\.1-windows-setup\.exe[ \t]*$') { $Matches[1].ToLowerInvariant() }
+          })
+          if ($matched.Count -ne 1) { throw 'Expected exactly one SHA-256 entry for the fixed Windows EXE.' }
+          Invoke-WebRequest -Uri ($base + $asset) -OutFile $installer
+          $actual = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $matched[0]) { throw 'Published installer SHA-256 mismatch; nothing will be executed.' }
+          [pscustomobject]@{url=($base + $asset); sha256=$actual; checksumVerified=$true; bytes=(Get-Item -LiteralPath $installer).Length} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory 'download-verification.json') -Encoding utf8
+
+      - name: Verify the exact published EXE without rebuilding it
+        run: |
+          & python windows/smoke_installer.py --installer build/published-installer-ci/trama-v0.10.1-windows-setup.exe --version 0.10.1 --work build/published-installer-ci --report build/published-installer-ci/smoke-installer-report.json 2>&1 | Tee-Object -FilePath build/published-installer-ci/smoke-console.log
+          if ($LASTEXITCODE -ne 0) { throw 'Published Windows installer verification failed.' }
+
+      - name: Keep published installer verification report and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer-published-v0.10.1-verification
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            build/published-installer-ci/**/*.log
+            build/published-installer-ci/*report.json
+            build/published-installer-ci/download-verification.json
+            build/published-installer-ci/trama-v0.10.1-SHA256.txt

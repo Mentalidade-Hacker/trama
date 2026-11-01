@@ -188,7 +188,7 @@ class Store:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Trama/0.10"
+    server_version = "Trama/0.10.1"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):
@@ -621,8 +621,8 @@ class Server(ThreadingHTTPServer):
         if set(payload) != {'revision', 'client'} or type(payload.get('revision')) is not int or not isinstance(payload.get('client'), str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', payload['client']):
             raise ValueError('Informe a versão salva e a janela que solicitou o encerramento.')
         with self.close_lock, self.store.sync.lock:
-            if not self.can_close or self.updates.status().get('state') != 'ready':
-                raise Conflict('Abra o Trama pelo atalho e aguarde uma atualização ficar pronta antes de encerrar por aqui.')
+            if not self.can_close:
+                raise Conflict('Abra o Trama pelo atalho para poder encerrar por aqui.')
             if self.close_requested:
                 raise Conflict('O Trama já está encerrando.')
             if self.store.revision() != payload['revision']:

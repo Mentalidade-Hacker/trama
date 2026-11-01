@@ -41,11 +41,16 @@ export function updateStatusHTML(status,connectionError='') {
   return `<section class="update-status" data-update-state="${item.state}"><h3>${esc(item.label)}</h3><p>${esc(item.message)}</p>${progress}${ready}</section>`;
 }
 
+export function closeStatusHTML(status,connectionError='') {
+  const error=connectionError?`<p class="update-error" role="alert">${esc(connectionError)}</p>`:'';
+  return `<section class="update-status"><h3>Salvar e encerrar o aplicativo?</h3><p>As notas e os rascunhos desta janela serão salvos antes de encerrar.</p><p>Confira se as outras janelas do Trama também mostram que tudo está salvo.</p>${status?.state==='ready'?'<p>A atualização já baixada será aplicada quando você abrir novamente.</p>':''}${status?.canClose===false?'<p>Esta abertura não permite encerramento pelo painel. Salve suas notas e encerre com Ctrl+C no terminal.</p>':''}${error}</section>`;
+}
+
 /** No browser action installs code: the launcher applies an already verified package. */
 export function setupUpdates(ctx) {
   const dialog=document.createElement('dialog');dialog.id='update-dialog';dialog.setAttribute('aria-labelledby','update-title');document.body.append(dialog);
   const $=selector=>dialog.querySelector(selector);
-  let latest=null,connectionError='',notice='',noticeError=false,mutation=false,saving=false,closing=false,terminated=false;
+  let latest=null,connectionError='',notice='',noticeError=false,mutation=false,saving=false,closing=false,terminated=false,exitOnly=false;
   let stopped=true,requestEpoch=0,timer=null,reading=null,readController=null;
 
   async function request(path,body,signal) {
@@ -69,7 +74,8 @@ export function setupUpdates(ctx) {
   }
 
   function paint() {
-    const item=terminated?{state:'closed',label:'Trama encerrado',message:'Abra novamente pelo atalho para aplicar a atualização.'}:updatePresentation(latest,connectionError);
+    const item=terminated?{state:'closed',label:'Trama encerrado',message:'Abra novamente pelo atalho quando quiser continuar.'}:updatePresentation(latest,connectionError);
+    document.querySelectorAll('[data-app-close]').forEach(button=>{button.hidden=!latest?.canClose;button.disabled=terminated;});
     document.querySelectorAll('[data-update-indicator]').forEach(button=>{
       const label=button.querySelector('[data-update-label]')||button;
       const text=['checking','downloading','ready','error','closed'].includes(item.state)?item.label:'Atualizações';
@@ -77,14 +83,14 @@ export function setupUpdates(ctx) {
       button.dataset.updateState=item.state;button.title=item.message;button.setAttribute('aria-label',item.label+'. Abrir atualizações.');
     });
     if(!dialog.open||terminated)return;
-    const display=$('[data-update-status]'),html=updateStatusHTML(latest,connectionError);
+    const display=$('[data-update-status]'),html=exitOnly?closeStatusHTML(latest,connectionError):updateStatusHTML(latest,connectionError);
     if(display&&display.innerHTML!==html)display.innerHTML=html;
     const blocked=mutation||saving||closing,development=latest?.state==='development',working=['checking','downloading'].includes(latest?.state)&&!connectionError;
     const automatic=$('[data-update-automatic]');automatic.disabled=blocked||development||!latest;if(!mutation)automatic.checked=latest?.automatic===true;
     $('[data-update-check]').disabled=blocked||development||working||(!latest&&!connectionError);
     $('[data-update-close]').disabled=closing;
-    $('[data-update-save]').hidden=latest?.state!=='ready'||latest?.canClose===true;
-    $('[data-update-exit]').hidden=latest?.state!=='ready'||latest?.canClose!==true;
+    $('[data-update-save]').hidden=exitOnly||latest?.state!=='ready'||latest?.canClose===true;
+    $('[data-update-exit]').hidden=(!exitOnly&&latest?.state!=='ready')||latest?.canClose!==true;
     $('[data-update-save]').disabled=blocked;$('[data-update-exit]').disabled=blocked||!!connectionError;
     $('[data-update-current]').textContent=latest?.currentVersion||'—';
     $('[data-update-available]').textContent=latest?.availableVersion!=='—'&&latest?.availableVersion?latest.availableVersion:'—';
@@ -127,7 +133,7 @@ export function setupUpdates(ctx) {
   }
 
   async function saveBeforeClosing(exit=false) {
-    if(saving||closing||mutation||terminated||latest?.state!=='ready'||(exit&&!latest.canClose))return;
+    if(saving||closing||mutation||terminated||(!exitOnly&&latest?.state!=='ready')||(exit&&!latest?.canClose))return;
     saving=true;closing=exit;notice='Confirmando o salvamento desta janela…';noticeError=false;paint();
     try {
       await flushNotes();
@@ -136,15 +142,17 @@ export function setupUpdates(ctx) {
         const result=await request('/api/app/close',{revision:ctx.revision,client:ctx.updateClientId});
         if(result.ok!==true)throw Error('O encerramento não foi confirmado. Mantenha esta janela aberta e tente novamente.');
         terminated=true;stop();
-        dialog.innerHTML='<header class="update-head"><div><p class="update-eyebrow">ATUALIZAÇÕES DO TRAMA</p><h2 id="update-title" tabindex="-1">Trama encerrado</h2></div></header><div class="update-body"><section class="update-status" data-update-state="ready" role="status" aria-live="polite"><h3>Agora, abra novamente pelo atalho</h3><p>Feche esta janela do navegador e abra o Trama novamente pelo atalho para aplicar a atualização.</p><p>Recarregar esta página não inicia o aplicativo.</p></section></div>';
+        dialog.innerHTML=`<header class="update-head"><div><p class="update-eyebrow">TRAMA</p><h2 id="update-title" tabindex="-1">Trama encerrado</h2></div></header><div class="update-body"><section class="update-status" data-update-state="ready" role="status" aria-live="polite"><h3>Suas alterações desta janela foram salvas</h3><p>Você pode fechar esta janela. ${latest.state==='ready'?'Abra novamente pelo atalho para aplicar a atualização.':'Abra novamente pelo atalho quando quiser continuar.'}</p><p>Recarregar esta página não inicia o aplicativo.</p></section></div>`;
         dialog.setAttribute('aria-busy','false');$('#update-title')?.focus();paint();
       } else notice='Salvamento desta janela confirmado. Confira também outras janelas abertas. Agora, encerre o Trama com Ctrl+C no terminal e abra novamente pelo atalho.';
     } catch(error){notice=error.message;noticeError=true;}
     finally{saving=false;closing=false;paint();}
   }
 
-  function open() {
+  function open(exit=false) {
     if(terminated)return;
+    if(dialog.open&&exitOnly!==exit){if(closing||saving||mutation)return;dialog.close();}
+    exitOnly=exit;
     if(!dialog.open) {
       dialog.innerHTML=`<header class="update-head"><div><p class="update-eyebrow">SEMPRE COM VOCÊ</p><h2 id="update-title">Atualizações do Trama</h2></div><button class="update-close" type="button" data-update-close aria-label="Fechar atualizações">✕</button></header><div class="update-body"><p class="update-intro">Baixe novas versões enquanto continua escrevendo. A instalação acontece quando você encerra e abre o Trama novamente.</p><dl class="update-versions"><div><dt>Neste computador</dt><dd data-update-current>—</dd></div><div><dt>Versão disponível</dt><dd data-update-available>—</dd></div></dl><div data-update-status role="status" aria-live="polite" aria-atomic="true"></div><label class="update-toggle"><input type="checkbox" data-update-automatic><span><strong>Baixar atualizações automaticamente</strong><small>Busca novas versões estáveis publicadas no GitHub. Desligar impede verificações automáticas futuras; um pacote já pronto ainda será instalado na próxima inicialização.</small></span></label><div class="update-actions"><button class="update-primary" type="button" data-update-check>Verificar atualização</button><button class="update-secondary" type="button" data-update-save hidden>Salvar notas antes de fechar</button><button class="update-secondary" type="button" data-update-exit hidden>Salvar e encerrar Trama</button></div><p class="update-feedback" data-update-feedback role="status" aria-live="polite"></p><p class="update-note">Suas notas, modelos de idioma e credenciais são preservados. Esta atualização é do aplicativo e não substitui o backup das suas notas.</p><div class="update-footer"><span data-update-checked></span><a data-update-release href="${RELEASES}" target="_blank" rel="noopener noreferrer">Versões publicadas no GitHub ↗</a></div></div>`;
       $('[data-update-close]').onclick=()=>{if(!closing&&!terminated)dialog.close();};
@@ -152,6 +160,8 @@ export function setupUpdates(ctx) {
       $('[data-update-automatic]').onchange=event=>void change('settings',{automatic:event.target.checked});
       $('[data-update-save]').onclick=()=>void saveBeforeClosing();
       $('[data-update-exit]').onclick=()=>void saveBeforeClosing(true);
+      dialog.dataset.exitOnly=String(exitOnly);
+      if(exitOnly){$('#update-title').textContent='Encerrar Trama';$('[data-update-close]').setAttribute('aria-label','Cancelar encerramento');}
       dialog.showModal();
     }
     paint();start();
@@ -162,9 +172,10 @@ export function setupUpdates(ctx) {
   dialog.addEventListener('close',()=>schedule());
   dialog.addEventListener('keydown',event=>event.stopPropagation());
   dialog.addEventListener('click',event=>event.stopPropagation());
-  document.addEventListener('click',event=>{if(event.target.closest('[data-update-open]')){event.preventDefault();open();}});
+  document.addEventListener('click',event=>{if(event.target.closest('[data-app-close]')){event.preventDefault();open(true);}else if(event.target.closest('[data-update-open]')){event.preventDefault();open();}});
   document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(timer);timer=null;}else start();});
   window.addEventListener('pagehide',stop);window.addEventListener('pageshow',event=>{if(event.persisted)start();});
   start();
-  return {open,start,stop,refresh,dialog};
+  if(new URLSearchParams(window.location?.search||'').get('trama-action')==='close')open(true);
+  return {open,openExit:()=>open(true),start,stop,refresh,dialog};
 }
