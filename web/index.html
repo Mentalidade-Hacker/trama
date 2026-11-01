@@ -20,6 +20,9 @@
   <link rel="stylesheet" href="/vendor/katex/katex.min.css">
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/typography.css">
+  <link rel="stylesheet" href="/workspace-ui.css">
+  <link rel="stylesheet" href="/link-ui.css">
+  <link rel="stylesheet" href="/connections.css">
 </head>
 <body>
   <aside class="sidebar" id="sidebar">
@@ -28,26 +31,51 @@
     <nav aria-label="Navegação">
       <button data-action="daily"><span>▦</span> Notas diárias</button>
       <button data-action="journals"><span>☷</span> Diário contínuo</button>
-      <button data-feature="calendar"><span>▦</span> Calendário</button>
       <button data-action="graph"><span>⌘</span> Visão do grafo</button>
       <button data-action="pages"><span>▤</span> Todas as páginas</button>
-      <button data-learning-open><span>✎</span> Aprender a escrever</button>
-    <button data-feature="templates"><span>▧</span> Templates</button><button data-feature="attachments"><span>⌁</span> Arquivos</button><button data-sync-open><span>⇄</span> Sincronização</button><button data-feature="history"><span>↶</span> Histórico</button></nav>
-    <div class="sidebar-label">ATALHOS <button data-action="new" title="Criar página">+</button></div>
+      <details class="workspace-tools" data-workspace-menu>
+        <summary><span aria-hidden="true">⋯</span> Ferramentas</summary>
+        <div class="workspace-tool-list">
+          <button data-learning-open><span>✎</span> Aprender a escrever</button>
+          <button data-feature="calendar"><span>▦</span> Calendário</button>
+          <button data-feature="templates"><span>▧</span> Templates</button>
+          <button data-feature="attachments"><span>⌁</span> Arquivos</button>
+          <button data-feature="history"><span>↶</span> Histórico</button>
+        </div>
+      </details>
+    </nav>
+    <div class="sidebar-label" id="favorites-heading">ATALHOS</div>
     <div id="favorites"></div>
     <div class="sidebar-label">PÁGINAS RECENTES</div>
     <div id="recent"></div>
-    <div class="sidebar-bottom"><div class="local-indicator"><i></i> Seu grafo, neste computador</div><button class="sync-indicator" data-sync-open data-sync-indicator><span data-sync-label>Conectar outro computador</span></button><button data-app-close hidden>⏻ <span>Encerrar Trama</span></button><button data-update-open data-update-indicator>↻ <span data-update-label>Atualizações</span></button><button data-action="help">? <span>Guia e atalhos</span></button><button data-action="theme">◐ <span>Aparência</span></button><button data-action="settings">⚙ <span>Dados e backups</span></button></div>
+    <div class="sidebar-bottom">
+      <button class="sync-indicator" data-sync-open data-sync-indicator><span data-sync-label role="status" aria-live="polite">Conectar outro computador</span></button>
+      <button data-update-open data-update-indicator>↻ <span data-update-label>Atualizações</span></button>
+      <details class="workspace-tools" data-workspace-menu>
+        <summary><span aria-hidden="true">⚙</span> Aplicativo</summary>
+        <div class="workspace-tool-list"><button data-action="settings">Dados e backups</button><button data-action="help">Guia e atalhos</button><button data-app-close hidden>Encerrar Trama</button></div>
+      </details>
+    </div>
   </aside>
   <div class="workspace">
-    <header class="topbar"><button data-action="toggle-nav" title="Alternar navegação">☰</button><button data-action="back" title="Voltar">←</button><div id="breadcrumb">Meu grafo</div><button class="proof-launch" data-action="proofread" title="Revisar ortografia e gramática · Ctrl Alt L">Abc <span>Revisar</span></button><button class="dictionary-launch" data-dictionary-open title="Consultar palavra · Alt Shift D">Dicionário</button><button class="text-size-launch" data-action="theme" aria-label="Ajustar tamanho do texto" title="Tamanho do texto">Aa</button><label class="theme-picker" title="Escolher aparência"><span aria-hidden="true">◐</span><select data-theme-select aria-label="Tema"><option value="light">Claro</option><option value="dark">Escuro</option><option value="system">Seguir o sistema</option></select></label><span class="save-status" id="save-status" role="status">Abrindo…</span><button data-action="new" class="new-page">+ Nova página</button></header>
+    <header class="topbar">
+      <button data-action="toggle-nav" title="Alternar navegação" aria-label="Alternar navegação">☰</button><button data-action="back" title="Voltar" aria-label="Voltar">←</button>
+      <div id="breadcrumb">Meu grafo</div>
+      <details class="workspace-writing-menu" data-workspace-menu>
+        <summary>Mais</summary>
+        <div class="workspace-writing-actions"><button data-action="proofread" title="Revisar ortografia e gramática · Ctrl Alt L">Revisar texto <kbd>Ctrl Alt L</kbd></button><button data-dictionary-open title="Consultar palavra · Alt Shift D">Dicionário <kbd>Alt Shift D</kbd></button><button data-writing-settings>Idioma e revisão ao digitar</button><button data-translate-page="pt">Traduzir página para português</button><button data-translate-page="en">Translate page to English</button><button data-vocabulary-open>Meu vocabulário</button><button data-vocabulary-suggest>Explorar palavras</button></div>
+      </details>
+      <button class="text-size-launch" data-action="theme" aria-label="Aparência e tamanho do texto" title="Tema e tamanho do texto">Aa</button>
+      <span class="save-status" id="save-status" role="status">Abrindo…</span><button data-action="new" class="new-page">+ Nova página</button>
+    </header>
     <div class="panes"><main id="main" tabindex="-1"><div class="loading">Abrindo seu grafo local…</div></main><aside id="right-panel" class="right-panel" hidden></aside></div>
-    <footer><span>TRAMA <span class="version">/ 0.10.2</span></span><span id="stats"></span><button class="sync-indicator" data-sync-open data-sync-indicator><span data-sync-label role="status" aria-live="polite">Conectar outro computador</span></button></footer>
+    <footer><span>TRAMA <span class="version">/ 0.11</span></span><span id="stats"></span></footer>
   </div>
   <dialog id="modal"><div id="modal-content"></div></dialog>
   <div id="toast" role="status" hidden></div>
   <input type="file" id="import-file" accept=".json,application/json" hidden>
   <script src="/vendor/katex/katex.min.js"></script>
+  <script type="module" src="/workspace-ui.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

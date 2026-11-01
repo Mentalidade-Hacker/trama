@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       verify_published_installer:
-        description: 'Install and verify the exact published Windows EXE for v0.10.2'
+        description: 'Install and verify the exact published Windows EXE for v0.11'
         type: boolean
         required: false
         default: false
@@ -131,7 +131,7 @@ jobs:
         # The launched app gets no Python on PATH and invalid Python env settings.
         run: |
           $tools = Get-Content -LiteralPath build/installer-ci/toolchain.json -Raw | ConvertFrom-Json
-          & python windows/smoke_installer.py --source . --version 0.10.2 --runtime $tools.Runtime --iscc $tools.Compiler --csc $tools.Csc --runtime-package-sha256 $tools.PythonPackageSha256 --work build/installer-ci --report build/installer-ci/smoke-installer-report.json 2>&1 | Tee-Object -FilePath build/installer-ci/smoke-console.log
+          & python windows/smoke_installer.py --source . --version 0.11 --runtime $tools.Runtime --iscc $tools.Compiler --csc $tools.Csc --runtime-package-sha256 $tools.PythonPackageSha256 --work build/installer-ci --report build/installer-ci/smoke-installer-report.json 2>&1 | Tee-Object -FilePath build/installer-ci/smoke-console.log
           if ($LASTEXITCODE -ne 0) { throw 'Windows installer smoke test failed.' }
 
       - name: Keep installer verification report and logs
@@ -147,7 +147,7 @@ jobs:
             build/installer-ci/toolchain.json
 
   published-windows-installer:
-    name: Published Windows EXE (v0.10.2 exact artifact)
+    name: Published Windows EXE (v0.11 exact artifact)
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_published_installer }}
     runs-on: windows-latest
     timeout-minutes: 30
@@ -174,13 +174,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $directory = Join-Path $env:GITHUB_WORKSPACE 'build/published-installer-ci'
           New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          $asset = 'trama-v0.10.2-windows-setup.exe'
-          $base = 'https://github.com/Mentalidade-Hacker/trama/releases/download/v0.10.2/'
-          $checksums = Join-Path $directory 'trama-v0.10.2-SHA256.txt'
+          $asset = 'trama-v0.11-windows-setup.exe'
+          $base = 'https://github.com/Mentalidade-Hacker/trama/releases/download/v0.11/'
+          $checksums = Join-Path $directory 'trama-v0.11-SHA256.txt'
           $installer = Join-Path $directory $asset
-          Invoke-WebRequest -Uri ($base + 'trama-v0.10.2-SHA256.txt') -OutFile $checksums
+          Invoke-WebRequest -Uri ($base + 'trama-v0.11-SHA256.txt') -OutFile $checksums
           $matched = @(Get-Content -LiteralPath $checksums | ForEach-Object {
-            if ($_ -match '^([A-Fa-f0-9]{64})[ \t]+\*?trama-v0\.10\.2-windows-setup\.exe[ \t]*$') { $Matches[1].ToLowerInvariant() }
+            if ($_ -match '^([A-Fa-f0-9]{64})[ \t]+\*?trama-v0\.11-windows-setup\.exe[ \t]*$') { $Matches[1].ToLowerInvariant() }
           })
           if ($matched.Count -ne 1) { throw 'Expected exactly one SHA-256 entry for the fixed Windows EXE.' }
           Invoke-WebRequest -Uri ($base + $asset) -OutFile $installer
@@ -190,18 +190,18 @@ jobs:
 
       - name: Verify the exact published EXE without rebuilding it
         run: |
-          & python windows/smoke_installer.py --installer build/published-installer-ci/trama-v0.10.2-windows-setup.exe --version 0.10.2 --work build/published-installer-ci --report build/published-installer-ci/smoke-installer-report.json 2>&1 | Tee-Object -FilePath build/published-installer-ci/smoke-console.log
+          & python windows/smoke_installer.py --installer build/published-installer-ci/trama-v0.11-windows-setup.exe --version 0.11 --work build/published-installer-ci --report build/published-installer-ci/smoke-installer-report.json 2>&1 | Tee-Object -FilePath build/published-installer-ci/smoke-console.log
           if ($LASTEXITCODE -ne 0) { throw 'Published Windows installer verification failed.' }
 
       - name: Keep published installer verification report and logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: windows-installer-published-v0.10.2-verification
+          name: windows-installer-published-v0.11-verification
           retention-days: 30
           if-no-files-found: warn
           path: |
             build/published-installer-ci/**/*.log
             build/published-installer-ci/*report.json
             build/published-installer-ci/download-verification.json
-            build/published-installer-ci/trama-v0.10.2-SHA256.txt
+            build/published-installer-ci/trama-v0.11-SHA256.txt

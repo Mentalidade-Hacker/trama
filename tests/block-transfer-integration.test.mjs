@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import {newPage} from '../web/core.js';
+import {transferBlock} from '../web/block-transfer.js';
+const source=fs.readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+test('real drag handlers allow copy gestures and pass Ctrl/Shift as a live reference insertion',()=>{
+  const a=newPage('A'),b=newPage('B'),data={version:1,pages:[a,b]},callbacks=new Map(),changed=[];
+  const line={classList:{add(){}}},target={dataset:{id:b.blocks[0].id}},document={addEventListener:(name,fn)=>callbacks.set(name,fn),querySelectorAll:()=>[]};
+  const context={document,data,transferBlock,checkpoint(){},changed:id=>changed.push(id),editing:null,render(){},toast:message=>assert.fail(message)};
+  vm.createContext(context);vm.runInContext(source.slice(source.indexOf('let dragged=null;'),source.indexOf("$('#import-file').addEventListener")),context);
+  const dt={setData(type,text){assert.equal(type,'text/plain');this.text=text;}};
+  callbacks.get('dragstart')({target:{closest:()=>({dataset:{zoom:a.blocks[0].id}})},dataTransfer:dt});
+  assert.equal(dt.effectAllowed,'copyMove');
+  callbacks.get('dragover')({target:{closest:()=>line},dataTransfer:dt,ctrlKey:true,preventDefault(){}});
+  assert.equal(dt.dropEffect,'copy');
+  callbacks.get('drop')({target:{closest:()=>target},ctrlKey:true,shiftKey:true,preventDefault(){}});
+  assert.equal(a.blocks.length,1);assert.equal(b.blocks[0].children[0].text,`((${a.blocks[0].id}))`);assert.deepEqual(changed,[b.id]);
+});

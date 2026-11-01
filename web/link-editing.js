@@ -22,5 +22,6 @@ export function stepOverLinkClose(editor,event) {
 // Completing a title halfway through an existing link replaces its whole title.
 export function linkCompletionEnd(value,end,close) {
   const tail=value.slice(end),at=tail.indexOf(close);
-  return at>=0&&!/[\[\]()\r\n]/.test(tail.slice(0,at))?end+at+close.length:end;
+  const delimiter=close===']]'?/\[\[|[\]\r\n]/:/[()\r\n]/;
+  return at>=0&&!delimiter.test(tail.slice(0,at))?end+at+close.length:end;
 }

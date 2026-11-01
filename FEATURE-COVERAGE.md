@@ -1,4 +1,7 @@
-# Cobertura funcional — Trama 0.9.1
+# Cobertura funcional — Trama 0.11
+
+A versão 0.11 prioriza escrever notas e conectá-las: ferramentas secundárias recolhidas, sugestões de páginas/tags/blocos, referências com ancestrais e filhos, edição no original e painel lateral. Veja [WORKSPACE.md](WORKSPACE.md) e [RELEASE-v0.11.md](RELEASE-v0.11.md). Os limites são explícitos; nenhuma equivalência integral ao Roam é afirmada. Os resultados executados de cada distribuição constam em seu relatório de publicação.
+
 
 Este documento descreve os arquivos entregues. **Completo no escopo** indica que o fluxo local descrito está implementado, sem afirmar equivalência integral com o Roam. **Parcial** lista diferenças. **Ausente** significa não incluído. Não há porcentagem de paridade.
 
@@ -9,14 +12,14 @@ Esta revisão cobre os fluxos de escrita, hierarquia, ligações, referências, 
 | Função | Estado | Entregue e limites |
 | --- | --- | --- |
 | Aparência | Completo no escopo | Claro (padrão sem preferência), Escuro opcional e Seguir o sistema. Tamanho do texto de 80% a 200%, com A−/A+, prévia imediata e restauração do padrão. Preferências locais por navegador, aplicadas antes da primeira exibição e atualizadas entre janelas da mesma origem. Mídia preserva suas cores. |
-| Páginas, links e tags | Completo no escopo | Criação, navegação, autocomplete, backlinks e atualização ao renomear. Código, fórmulas, URLs e rótulos de aliases não criam conexões falsas nem são alterados ao renomear. Sem apresentação configurável de namespaces. |
-| Menções sem link | Completo no escopo | Busca textual e ação de vincular; sem detecção semântica. |
+| Páginas, links e tags | Completo no escopo | Criação, navegação, autocomplete, backlinks e atualização ao renomear. Código, fórmulas, URLs e rótulos de aliases não criam conexões falsas nem são alterados ao renomear. Sugestões aceitam busca sem acento, mas a identidade preserva os acentos; namespaces não têm apresentação configurável. Os links aninhados não são suportados. |
+| Menções sem link | Completo no escopo | Busca textual com contexto, edição do original e ação de vincular; sem detecção semântica. |
 | Blocos hierárquicos | Completo no escopo | IDs estáveis, recuo, recolhimento, foco, duplicação, reordenação e movimentação entre páginas. Importação e recuo respeitam o limite de 100 níveis aceito pelo armazenamento. |
-| Referências a blocos | Completo no escopo | Conteúdo vivo e aviso de destino ausente/circular. |
+| Referências a blocos | Completo no escopo | Conteúdo vivo, busca por texto/contexto/ID, contador por blocos-fonte e aviso de destino ausente/circular. |
 | Incorporações de blocos/páginas | Parcial | Editáveis sobre os dados originais; sem todas as variantes e conversões do Roam. |
 | Aliases/atributos | Parcial | Rótulos de links e `Nome::` como conexão; sem propriedades tipadas completas. |
 | Diário | Completo no escopo | Hoje, seletor de data e diário contínuo; títulos novos em ISO. |
-| Painel lateral | Parcial | Vários destinos editáveis; organização/atalhos não idênticos ao Roam. |
+| Painel lateral | Parcial | Vários destinos editáveis e conexões com contexto; Shift+clique em links internos abre o destino. Organização/atalhos não idênticos ao Roam. |
 | Seleção múltipla | Parcial | Ações coletivas; não reproduz todos os gestos e atalhos do Roam. |
 | Formatação | Parcial | Títulos 1–3, alinhamento, tópicos/listas/documento, negrito/itálico/destaque/riscado e código. Sem Markdown completo. |
 | LaTeX | Parcial | KaTeX local; subconjunto aceito pela biblioteca. |

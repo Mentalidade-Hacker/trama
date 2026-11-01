@@ -259,7 +259,7 @@ def main():
     parser.add_argument('--csc', type=Path)
     parser.add_argument('--runtime-package-sha256')
     parser.add_argument('--installer', type=Path, help='Test this exact existing installer instead of compiling with fixture dictionary')
-    parser.add_argument('--version', default='0.10.2')
+    parser.add_argument('--version', default='0.11')
     parser.add_argument('--work', type=Path, required=True)
     parser.add_argument('--report', type=Path)
     test_install(parser.parse_args())

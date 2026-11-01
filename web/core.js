@@ -1,14 +1,14 @@
 /** Trama's portable graph model. All mutators update the supplied data in place. */
 import { evaluateQuery } from './query.js';
 const fold = value => value.normalize('NFC').toLocaleLowerCase('pt-BR');
-const linkPattern = () => /#?\[\[([^\[\]\r\n]+)\]\]|(?<![\p{L}\p{N}_/])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu;
+const linkPattern = () => /#?\[\[([^\]\r\n]+)\]\]|(?<![\p{L}\p{N}_/])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu;
 const sameTitle = (a, b) => fold(a.trim()) === fold(b.trim());
 const now = () => new Date().toISOString();
-const attributePattern = () => /^([ \t]*)(\[\[[^\[\]\r\n]+\]\]|[^:\r\n]+?)::([ \t]*)(.*)$/gmu;
+const attributePattern = () => /^([ \t]*)(\[\[[^\]\r\n]+\]\]|[^:\r\n]+?)::([ \t]*)(.*)$/gmu;
 
 /** Literal syntax must not create graph connections or be rewritten on rename. */
 function literalSpans(text) {
-  const tokens = /```[\s\S]*?(?:```|$)|`[^`]+`|\$\$[\s\S]*?\$\$|\[([^\]\r\n]+)\]\((\[\[[^\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\))\)|!?\[[^\]\r\n]*\]\((?!\[\[|\(\()[^\s)]+\)|#?\[\[[^\[\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\)|https?:\/\/[^\s<>"']+/giu;
+  const tokens = /```[\s\S]*?(?:```|$)|`[^`]+`|\$\$[\s\S]*?\$\$|\[([^\]\r\n]+)\]\((\[\[[^\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\))\)|!?\[[^\]\r\n]*\]\((?!\[\[|\(\()[^\s)]+\)|#?\[\[[^\]\r\n]+\]\]|\(\([A-Za-z0-9_-]+\)\)|https?:\/\/[^\s<>"']+/giu;
   const spans = [];
   for (const match of text.matchAll(tokens)) {
     if (match[1] !== undefined) {
@@ -88,18 +88,18 @@ export function extractLinks(text) {
   const titles = new Map();
   for (const match of activeMatches(text, linkPattern())) {
     const title = (match[1] ?? match[2]).trim();
-    if (title) titles.set(fold(title), titles.get(fold(title)) ?? title);
+    if (title&&!title.includes('[[')) titles.set(fold(title), titles.get(fold(title)) ?? title);
   }
   for (const attribute of attributesOf(text)) titles.set(fold(attribute.name), titles.get(fold(attribute.name)) ?? attribute.name);
   return [...titles.values()];
 }
 
 export function extractRefs(text) {
-  return [...new Set(activeMatches(text, /\(\(([A-Za-z0-9_-]+)\)\)/g).map(match => match[1]))];
+  return [...new Set(activeMatches(text, /#?\[\[[^\]\r\n]+\]\]|\(\(([A-Za-z0-9_-]+)\)\)/g).filter(match=>match[1]).map(match => match[1]))];
 }
 
 export function rewriteBlockReferences(text, transform) {
-  return replaceActive(text, /\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => transform(id, whole));
+  return replaceActive(text, /#?\[\[[^\]\r\n]+\]\]|\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => id?transform(id, whole):whole);
 }
 
 export function findPage(data, title) {
@@ -128,7 +128,7 @@ export function backlinks(data, title) {
 export function unlinkedMentionIndex(text, title) {
   const clean = title.trim();
   if (!clean) return -1;
-  const protectedPattern = /\[[^\]\r\n]+\]\(https?:\/\/[^\s)]+\)|`[^`]*`|https?:\/\/\S+|#?\[\[([^\[\]\r\n]+)\]\]|(?<![\p{L}\p{N}_/])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)|\(\([A-Za-z0-9_-]+\)\)/gu;
+  const protectedPattern = /\[[^\]\r\n]+\]\(https?:\/\/[^\s)]+\)|`[^`]*`|https?:\/\/\S+|#?\[\[([^\]\r\n]+)\]\]|(?<![\p{L}\p{N}_/])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)|\(\([A-Za-z0-9_-]+\)\)/gu;
   const protectedSpans = [...literalSpans(text), ...[...text.matchAll(protectedPattern)].map(match => [match.index, match.index + match[0].length])];
   const literal = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const wordStart = /^[\p{L}\p{N}_]/u.test(clean);
@@ -380,7 +380,7 @@ export function instantiateTemplate(data, templateId, targetId, referenceDate = 
   }
   const blocks = template.block.children.map(block => clone(block, target.depth + 1));
   function rewrite(block) {
-    block.text = replaceActive(block.text, /\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => ids.has(id) ? `((${ids.get(id)}))` : whole)
+    block.text = rewriteBlockReferences(block.text, (id,whole) => ids.has(id) ? `((${ids.get(id)}))` : whole)
       .replace(/<%(today|tomorrow|yesterday)%>/g, (_, word) => localDate(word === 'tomorrow' ? 1 : word === 'yesterday' ? -1 : 0, referenceDate));
     block.children.forEach(rewrite);
   }
@@ -418,7 +418,7 @@ export function mergeGraph(data, incoming) {
   for (const page of addition.pages) {
     for (const { block } of walkBlocks([page])) {
       block.id = mapping.get(block.id) ?? block.id;
-      block.text = replaceActive(block.text, /\(\(([A-Za-z0-9_-]+)\)\)/g, (whole, id) => mapping.has(id) ? `((${mapping.get(id)}))` : whole);
+      block.text = rewriteBlockReferences(block.text, (id,whole) => mapping.has(id) ? `((${mapping.get(id)}))` : whole);
     }
     page.id = mapping.get(page.id) ?? page.id;
     const existing = findPage(result, page.title);

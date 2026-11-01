@@ -34,4 +34,6 @@ test('accepting a suggestion replaces existing title suffix and consumes its clo
   }
   const value='antes [[Pagina]] depois',start=6,end=9;
   assert.equal(value.slice(0,start)+'[[Página]]'+value.slice(linkCompletionEnd(value,end,']]')),'antes [[Página]] depois');
+  assert.equal(linkCompletionEnd('[[Projeto (2026)]] depois',5,']]'),18);
+  assert.equal(linkCompletionEnd('[[A [ exemplo]] depois',3,']]'),15);
 });

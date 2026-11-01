@@ -14,6 +14,9 @@ import {setupBackup} from './backup-ui.js';
 import {setupUpdates} from './update-ui.js';
 import {pairTypedLink,stepOverLinkClose,linkCompletionEnd} from './link-editing.js';
 import {reviewWriting} from './writing-review.js';
+import {pageSuggestions,blockSuggestions,incomingBlockCounts} from './link-discovery.js';
+import {renderPageConnections,renderBlockConnections} from './connections.js';
+import {transferBlock} from './block-transfer.js';
 import { maskMarkup, applySuggestion, isProtectedRange } from './proofread.js';
 
 const $ = s => document.querySelector(s);
@@ -26,6 +29,7 @@ let F, rightStack=[], selectedBlocks=new Set(), queryOptions=new Map();
 let proofLanguage='pt-BR', proofTarget=null, proofSnapshot='', proofMatches=[], proofRequest=0;
 try { proofLanguage=localStorage.getItem('trama-proof-language')||'pt-BR'; } catch {}
 let undo = [], redo = [], favorites = [], recent = [], suggestions = [], suggestionIndex = 0, completion = null;
+let blockRefCounts=new Map();
 try { favorites = JSON.parse(localStorage.getItem('trama-favorites') || '[]'); recent = JSON.parse(localStorage.getItem('trama-recent') || '[]'); } catch {}
 
 const pageById = id => data.pages.find(p => p.id === id);
@@ -69,7 +73,7 @@ function seed() {
 }
 function renderNav() {
   const links=(ids,star=false)=>ids.map(id=>pageById(id)).filter(Boolean).map(p=>`<a class="sidebar-page ${p.id===current?'active':''}" href="#p/${encodeURIComponent(p.id)}">${star?'<span class="star">☆</span>':''}${esc(p.title)}</a>`).join('');
-  $('#favorites').innerHTML=links(favorites,true)||'<span class="sidebar-page">Marque páginas com ☆</span>';
+  const favoriteLinks=links(favorites,true);$('#favorites').innerHTML=favoriteLinks;if($('#favorites-heading'))$('#favorites-heading').hidden=!favoriteLinks;
   $('#recent').innerHTML=links(recent.slice(0,7));
   $('#stats').textContent=`${data.pages.length} páginas · ${C.walkBlocks(data.pages).length} blocos`;
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.action===view || (b.dataset.action==='daily'&&view==='page'&&pageById(current)?.title===todayTitle())));
@@ -124,22 +128,21 @@ function blockHTML(block,scope='main',seen=new Set([block.id])) {
   const active=editing?.id===block.id&&editing?.scope===scope;
   let component=null;if(!active){try{component=F?.specialHTML(block)??renderComponent(block,componentContext());}catch(error){component=`<div class="error-banner">${esc(error.message)}</div>`;}}
   const hideChildren=component&&/^\{\{(?:\[\[)?(?:table|kanban)(?:\]\])?\}\}$/i.test(block.text.trim());
-  const heading=block.heading||0,mode=block.view||'bullet';
-  return `<li class="block block-heading-${heading} view-${mode} ${selectedBlocks.has(block.id)?'selected-block':''}" data-id="${esc(block.id)}" data-scope="${scope}" style="text-align:${['left','center','right'].includes(block.alignment)?block.alignment:'left'}"><div class="block-line"><button class="collapse" data-collapse="${esc(block.id)}" aria-label="${block.collapsed?'Expandir':'Recolher'} bloco">${block.children.length?(block.collapsed?'▸':'▾'):''}</button><button class="bullet ${block.children.length?'has-children':''}" draggable="true" data-zoom="${esc(block.id)}" title="Focar; Shift+clique seleciona vários blocos; arraste para mover" aria-label="Focar no bloco"></button><div class="block-body">${active?`<textarea class="block-editor" spellcheck="true" lang="${esc(proofLanguage)}" aria-label="Editar bloco" data-editor="${esc(block.id)}" rows="1" maxlength="1000000">${esc(block.text)}</textarea>`:`<div class="block-text ${block.text?'':'empty'}" data-edit="${esc(block.id)}" data-placeholder="Escreva aqui…">${component??rich(block.text,seen,block.id)}</div>`}</div><div class="block-tools"><button data-proof="${esc(block.id)}" title="Revisar ortografia e gramática">Abc</button><button data-copy="${esc(block.id)}" title="Copiar referência">↗</button><button data-menu="${esc(block.id)}" title="Opções do bloco">⋯</button></div></div>${block.children.length&&!block.collapsed&&!hideChildren?`<ul class="outline children child-view-${mode}">${block.children.map(b=>blockHTML(b,scope,new Set([...seen,b.id]))).join('')}</ul>`:''}</li>`;
+  const heading=block.heading||0,mode=block.view||'bullet',refCount=blockRefCounts.get(block.id)||0;
+  return `<li class="block block-heading-${heading} view-${mode} ${selectedBlocks.has(block.id)?'selected-block':''}" data-id="${esc(block.id)}" data-scope="${scope}" style="text-align:${['left','center','right'].includes(block.alignment)?block.alignment:'left'}"><div class="block-line"><button class="collapse" data-collapse="${esc(block.id)}" aria-label="${block.collapsed?'Expandir':'Recolher'} bloco">${block.children.length?(block.collapsed?'▸':'▾'):''}</button><button class="bullet ${block.children.length?'has-children':''}" draggable="true" data-zoom="${esc(block.id)}" title="Focar; Shift+clique seleciona vários blocos; arraste para mover" aria-label="Focar no bloco"></button><div class="block-body">${active?`<textarea class="block-editor" spellcheck="true" lang="${esc(proofLanguage)}" aria-label="Editar bloco" data-editor="${esc(block.id)}" rows="1" maxlength="1000000">${esc(block.text)}</textarea>`:`<div class="block-text ${block.text?'':'empty'}" data-edit="${esc(block.id)}" data-placeholder="Escreva aqui…">${component??rich(block.text,seen,block.id)}</div>`}</div>${refCount?`<button class="block-reference-count" data-block-references="${esc(block.id)}" aria-label="${refCount} referências a este bloco" title="Ver onde este bloco foi usado">${refCount}</button>`:''}<div class="block-tools"><button data-proof="${esc(block.id)}" title="Revisar ortografia e gramática">Abc</button><button data-copy="${esc(block.id)}" title="Copiar referência">↗</button><button data-menu="${esc(block.id)}" title="Opções do bloco">⋯</button></div></div>${block.children.length&&!block.collapsed&&!hideChildren?`<ul class="outline children child-view-${mode}">${block.children.map(b=>blockHTML(b,scope,new Set([...seen,b.id]))).join('')}</ul>`:''}</li>`;
 }
-function references(page) {
-  const entries=C.backlinks(data,page.title),unlinked=C.unlinkedReferences(data,page.title);
-  const groups=new Map();for(const e of entries){if(!groups.has(e.page.id))groups.set(e.page.id,{page:e.page,entries:[]});groups.get(e.page.id).entries.push(e);}
-  return `<details class="references" open><summary>Referências vinculadas <span>${entries.length}</span></summary><input class="reference-filter" data-reference-filter placeholder="Filtrar referências por texto…" aria-label="Filtrar referências">${[...groups.values()].map(g=>`<div class="reference-group"><a href="#p/${encodeURIComponent(g.page.id)}">${esc(g.page.title)}</a>${g.entries.map(e=>`<div class="reference-entry" data-goto="${esc(e.block.id)}"><div>${rich(e.block.text,new Set([e.block.id]),e.block.id)}</div></div>`).join('')}</div>`).join('')||'<p class="empty-state">As notas que mencionarem esta página aparecerão aqui.</p>'}</details><details class="references"><summary>Referências não vinculadas <span>${unlinked.length}</span></summary>${unlinked.map(e=>`<div class="reference-group"><a href="#p/${encodeURIComponent(e.page.id)}">${esc(e.page.title)}</a><div class="reference-entry"><div>${esc(e.block.text)}</div><button data-link-mention="${esc(e.block.id)}" data-title="${esc(page.title)}">Vincular</button></div></div>`).join('')||'<p class="empty-state">Nenhuma menção sem link encontrada.</p>'}</details>`;
-}
+function connectionOptions(scope){return {rich,esc,scope,renderBlock:(block,viewScope)=>blockHTML({...block,children:[]},viewScope)};}
+function references(page,scope='main') {return renderPageConnections(data,page,connectionOptions('connections-'+scope+'-'+encodeURIComponent(page.id)));}
 function renderPage() {
   const page=pageById(current);if(!page)return `<section class="welcome-graph"><div class="page-eyebrow">SEU ESPAÇO PARA PENSAR</div><h1>Comece uma ideia.<br>Encontre suas conexões.</h1><p>Escreva em blocos, organize com liberdade e conecte páginas usando <code>[[links]]</code>. Suas notas ficam neste computador.</p>${automaticSync?'<p class="proof-note">A sincronização automática está configurada. Aguardando as notas do outro computador…</p>':''}<div class="welcome-actions"><button class="primary" data-action="new">Criar primeira página</button><button class="secondary" data-sync-open>Conectar outro computador</button></div><button class="welcome-examples" data-action="add-examples">Conhecer com notas de exemplo →</button><p class="proof-note">Já tem notas em outro computador? Conecte a sincronização antes de criar exemplos.</p></section>`;
   const focus=zoom?C.findBlock(data,zoom):null;
-  const refEntries=focus?C.walkBlocks(data.pages).filter(e=>C.extractRefs(e.block.text).includes(focus.block.id)):[];
-  return `<div class="page-eyebrow">${dateLabel(page.title)?'NOTAS DIÁRIAS':'MEU GRAFO'} <span> / </span> ${focus?'BLOCO':'PÁGINA'}</div>${focus?`<div class="zoom-crumb"><a href="#p/${encodeURIComponent(page.id)}">${esc(page.title)}</a> / Bloco</div>`:''}<div class="page-heading"><h1><button class="title-button" data-action="rename" title="Renomear página">${esc(page.title)}</button></h1><button data-action="favorite" title="Adicionar aos atalhos">${favorites.includes(page.id)?'★':'☆'}</button><button data-action="page-menu" title="Opções da página">⋯</button></div><p class="page-subtitle">${esc(dateLabel(page.title)||'Uma página, muitas conexões.')} ${focus?'· Clique no nome acima para voltar à página.':''}</p><div class="language-bar"><span>Traduzir página:</span><button data-translate-page="pt" title="Traduzir do inglês para português">Português</button><button data-translate-page="en" title="Traduzir do português para inglês">English</button><button data-writing-settings>Revisão ao digitar</button><button data-vocabulary-open>Meu vocabulário</button><button data-vocabulary-suggest>Explorar palavras</button></div><ul class="outline">${(focus?[focus.block]:page.blocks).map(b=>blockHTML(b)).join('')}</ul><button class="add-block" data-action="add-block">+ Adicionar bloco</button><p class="editor-hint"><kbd>Enter</kbd> novo bloco &nbsp; <kbd>Tab</kbd> recuar &nbsp; <kbd>[[</kbd> conectar página &nbsp; <kbd>((</kbd> referenciar bloco</p>${focus?`<details class="references" open><summary>Referências a este bloco <span>${refEntries.length}</span></summary>${refEntries.map(e=>`<div class="reference-entry" data-goto="${esc(e.block.id)}">${esc(e.page.title)} · ${esc(e.block.text)}</div>`).join('')}</details>`:references(page)}`;
+  const connectionCount=focus?(blockRefCounts.get(focus.block.id)||0):C.backlinks(data,page.title).length;
+  const connections=focus?renderBlockConnections(data,focus,connectionOptions('connections-main-'+encodeURIComponent(focus.block.id))):references(page);
+  return `<div class="page-eyebrow">${dateLabel(page.title)?'NOTAS DIÁRIAS':'MEU GRAFO'} <span> / </span> ${focus?'BLOCO':'PÁGINA'}</div>${focus?`<div class="zoom-crumb"><a href="#p/${encodeURIComponent(page.id)}">${esc(page.title)}</a> / Bloco</div>`:''}<div class="page-heading"><h1><button class="title-button" data-action="rename" title="Renomear página">${esc(page.title)}</button></h1>${connectionCount?`<button class="page-connection-count" data-show-connections aria-label="Ver ${connectionCount} ${connectionCount===1?'conexão':'conexões'}">Conexões <span>${connectionCount}</span></button>`:''}<button data-action="favorite" title="Adicionar aos atalhos">${favorites.includes(page.id)?'★':'☆'}</button><button data-action="page-menu" title="Opções da página">⋯</button></div>${dateLabel(page.title)?`<p class="page-subtitle">${esc(dateLabel(page.title))}</p>`:''}<ul class="outline">${(focus?[focus.block]:page.blocks).map(b=>blockHTML(b)).join('')}</ul><button class="add-block" data-action="add-block">+ Adicionar bloco</button><details class="editor-hint"><summary>Atalhos de escrita e conexões</summary><p><kbd>Enter</kbd> novo bloco &nbsp; <kbd>Tab</kbd> recuar &nbsp; <kbd>[[</kbd> conectar página &nbsp; <kbd>((</kbd> referenciar bloco · Ctrl/Cmd + arrastar cria uma referência</p></details>${connections}`;
 }
 function render() {
   if(!editing&&materialize())changed();
+  blockRefCounts=incomingBlockCounts(data);
   rightStack=rightStack.filter(item=>pageById(item.page));
   suggestions=[]; completion=null;
   $('#breadcrumb').textContent=view==='page'?`Meu grafo / ${pageById(current)?.title||''}`:view==='graph'?'Meu grafo / Visão do grafo':view==='journals'?'Meu grafo / Diário contínuo':'Meu grafo / Todas as páginas';
@@ -153,7 +156,7 @@ function render() {
 function pushRight(page,block=null){const key=block||page;rightStack=[{page,block,key},...rightStack.filter(x=>x.key!==key)];right=page;renderRight();}
 function renderRight() {
   $('#right-panel').hidden=!rightStack.length;if(!rightStack.length)return;
-  $('#right-panel').innerHTML=`<header><span>PAINEL LATERAL · ${rightStack.length}</span><button data-action="close-right" aria-label="Fechar painel">✕</button></header>`+rightStack.map(item=>{const p=pageById(item.page),b=item.block?C.findBlock(data,item.block)?.block:null;return `<section class="sidebar-card"><header><a href="#p/${p.id}${b?'/b/'+b.id:''}">${esc(p.title)}${b?' / Bloco':''}</a><button data-close-card="${esc(item.key)}">✕</button></header><ul class="outline">${(b?[b]:p.blocks).map(block=>blockHTML(block,'right-'+item.key)).join('')}</ul></section>`;}).join('');
+  $('#right-panel').innerHTML=`<header><span>PAINEL LATERAL · ${rightStack.length}</span><button data-action="close-right" aria-label="Fechar painel">✕</button></header>`+rightStack.map(item=>{const p=pageById(item.page),b=item.block?C.findBlock(data,item.block)?.block:null;return `<section class="sidebar-card"><header><a href="#p/${p.id}${b?'/b/'+b.id:''}">${esc(p.title)}${b?' / Bloco':''}</a><button data-close-card="${esc(item.key)}">✕</button></header><ul class="outline">${(b?[b]:p.blocks).map(block=>blockHTML(block,'right-'+item.key)).join('')}</ul>${b?renderBlockConnections(data,C.findBlock(data,b.id),connectionOptions('connections-right-'+encodeURIComponent(item.key))):references(p,'right-'+encodeURIComponent(item.key))}</section>`;}).join('');
   bindComponents($('#right-panel'),componentContext());
 }
 function renderJournals(){const pages=data.pages.filter(p=>/^\d{4}-\d{2}-\d{2}$/.test(p.title)).sort((a,b)=>b.title.localeCompare(a.title)).slice(0,14);return `<div class="page-eyebrow">NOTAS DIÁRIAS</div><div class="page-heading"><h1>Seu diário</h1><button data-feature="calendar">▦</button></div><p class="page-subtitle">As 14 notas diárias mais recentes. Use o calendário para outras datas.</p>`+pages.map(p=>`<section class="journal-page"><h2><a data-page="${esc(p.title)}" href="#">${esc(p.title)}</a></h2><p class="page-subtitle">${esc(dateLabel(p.title))}</p><ul class="outline">${p.blocks.map(b=>blockHTML(b,'journal-'+p.id)).join('')}</ul><button class="add-block" data-add-to-page="${p.id}">+ Adicionar bloco</button></section>`).join('');}
@@ -172,26 +175,56 @@ function renderGraph(filter='') {
 document.addEventListener('trama:typography',()=>requestAnimationFrame(resizeEditors));
 window.addEventListener('resize',()=>requestAnimationFrame(resizeEditors));
 function resizeEditors(){document.querySelectorAll('.block-editor').forEach(el=>{el.style.height='auto';el.style.height=el.scrollHeight+'px';});}
-function edit(id,scope='main',pos=null,record=true){const entry=C.findBlock(data,id);if(!entry)return; if(editing&&editing.id!==id&&materialize())changed();if(record&&editing?.id!==id)checkpoint();editing={id,scope};render();const el=document.querySelector(`[data-scope="${scope}"] [data-editor="${CSS.escape(id)}"]`);if(el){el.focus();const at=pos===null?el.value.length:pos;el.setSelectionRange(at,at);resizeEditors();}}
+function edit(id,scope='main',pos=null,record=true){
+  const entry=C.findBlock(data,id);if(!entry)return;
+  if(editing&&editing.id!==id&&materialize())changed();
+  if(record&&editing?.id!==id)checkpoint();
+  editing={id,scope};render();
+  const findEditor=()=>document.querySelector(`[data-scope="${editing.scope}"] [data-editor="${CSS.escape(id)}"]`);
+  let el=findEditor();
+  if(!el&&scope.startsWith('connections-')){
+    const visible=document.querySelector(`[data-id="${CSS.escape(id)}"][data-scope]`);
+    if(visible){editing.scope=visible.dataset.scope;render();el=findEditor();}
+    if(!el){
+      current=entry.page.id;view='page';zoom=id;editing={id,scope:'main'};
+      history.replaceState(null,'','#p/'+encodeURIComponent(current)+'/b/'+encodeURIComponent(id));
+      render();el=findEditor();toast('Continuando no bloco original.');
+    }
+  }
+  if(el){el.focus();const at=pos===null?el.value.length:pos;el.setSelectionRange(at,at);resizeEditors();}
+}
 function structure(id,fn,pos=null){checkpoint();const pageId=C.findBlock(data,id)?.page.id;fn();changed(pageId);edit(id,editing?.scope||'main',pos);}
+function beginReference(id=editing?.id||pageById(current)?.blocks[0]?.id){
+  const entry=C.findBlock(data,id);if(!entry){toast('Escolha um bloco para inserir a referência.');return;}
+  const el=document.querySelector(`[data-editor="${CSS.escape(id)}"]`),scope=el?.closest('[data-scope]')?.dataset.scope||'main';
+  const start=el?.selectionStart??entry.block.text.length,end=el?.selectionEnd??start;
+  checkpoint();entry.block.text=entry.block.text.slice(0,start)+'(())'+entry.block.text.slice(end);changed(entry.page.id);
+  $('#modal').close();edit(id,scope,start+2,false);const editor=document.querySelector('.block-editor:focus');if(editor)complete(editor);
+}
 
 function complete(el) {
   document.querySelectorAll('.suggestions').forEach(e=>e.remove());suggestions=[];completion=null;
-  const before=el.value.slice(0,el.selectionStart),m=before.match(/(\[\[|\(\()([^\[\]()\n]*)$/);
+  const before=el.value.slice(0,el.selectionStart),m=before.match(/(\[\[)([^\]\r\n]*)$/)||before.match(/(\(\()([^()\r\n]*)$/);
   if(!m){
-    const slash=before.match(/(?:^|\s)\/([\p{L}-]*)$/u),template=before.match(/;;([^;\n]*)$/);
+    const slash=before.match(/(?:^|\s)\/([\p{L}-]*)$/u),template=before.match(/;;([^;\n]*)$/),tag=before.match(/(?:^|\s)#([\p{L}\p{N}_/-]*)$/u);
     if(slash){suggestions=commands.filter(c=>c.label.toLocaleLowerCase().includes(slash[1].toLocaleLowerCase())).slice(0,12);completion={start:before.length-slash[1].length-1,end:el.selectionStart,type:'command'};}
     else if(template){suggestions=C.listTemplates(data).filter(t=>t.label.toLocaleLowerCase().includes(template[1].toLocaleLowerCase())).slice(0,10).map(t=>({label:t.label,command:'template:'+t.id}));completion={start:template.index,end:el.selectionStart,type:'command'};}
-    if(!suggestions.length)return;suggestionIndex=0;const box=document.createElement('div');box.className='suggestions';box.innerHTML=suggestions.map((s,i)=>`<button data-suggestion="${i}" class="${i===0?'selected':''}">${esc(s.label)}</button>`).join('');el.parentElement.append(box);return;
-  } const type=m[1]==='[['?'page':'block',query=m[2].toLocaleLowerCase();
-  suggestions=type==='page'?data.pages.filter(p=>p.title.toLocaleLowerCase().includes(query)).slice(0,7).map(p=>({label:p.title,value:p.title})):C.walkBlocks(data.pages).filter(e=>e.block.id!==editing.id&&e.block.text.toLocaleLowerCase().includes(query)).slice(0,7).map(e=>({label:`${e.block.text||'(vazio)'} · ${e.page.title}`,value:e.block.id}));
-  if(type==='page'&&m[2].trim()&&!C.findPage(data,m[2].trim()))suggestions.push({label:`Criar “${m[2].trim()}”`,value:m[2].trim()});
+    else if(tag){suggestions=pageSuggestions(data,tag[1]);completion={start:before.length-tag[1].length-1,end:el.selectionStart,type:'tag'};}
+    if(!suggestions.length)return;suggestionIndex=0;const box=document.createElement('div');box.className='suggestions';box.innerHTML=suggestions.map((s,i)=>`<button data-suggestion="${i}" class="${i===0?'selected':''}">${esc(s.text||s.label)}${s.description?`<small>${esc(s.description)}</small>`:''}</button>`).join('');el.parentElement.append(box);return;
+  } const type=m[1]==='[['?'page':'block';
+  suggestions=type==='page'?pageSuggestions(data,m[2]):blockSuggestions(data,m[2],{excludeId:editing.id});
   if(!suggestions.length)return;completion={start:m.index,end:el.selectionStart,type};suggestionIndex=0;
-  const box=document.createElement('div');box.className='suggestions';box.innerHTML=suggestions.map((s,i)=>`<button data-suggestion="${i}" class="${i===0?'selected':''}">${esc(s.label)}</button>`).join('');el.parentElement.append(box);
+  const box=document.createElement('div');box.className='suggestions';box.innerHTML=suggestions.map((s,i)=>`<button data-suggestion="${i}" class="${i===0?'selected':''}">${esc(s.text||s.label)}${s.description?`<small>${esc(s.description)}</small>`:''}</button>`).join('');el.parentElement.append(box);
 }
 function acceptSuggestion(index) {
   const el=document.querySelector('.block-editor:focus')||document.querySelector('.block-editor'),s=suggestions[index];if(!el||!s||!completion)return;
-  if(completion.type==='command'){const id=editing.id,entry=C.findBlock(data,id);entry.block.text=el.value.slice(0,completion.start)+el.value.slice(completion.end);changed(entry.page.id);suggestions=[];completion=null;F.execute(s.command,id);return;}
+  if(completion.type==='command'){const id=editing.id,entry=C.findBlock(data,id);entry.block.text=el.value.slice(0,completion.start)+el.value.slice(completion.end);el.value=entry.block.text;el.setSelectionRange(completion.start,completion.start);changed(entry.page.id);suggestions=[];completion=null;F.execute(s.command,id);return;}
+  if(completion.type==='tag'){
+    const value=/^[\p{L}\p{N}_][\p{L}\p{N}_/-]*$/u.test(s.value)?'#'+s.value:'#[['+s.value+']]';
+    const suffix=el.value.slice(completion.end).match(/^[\p{L}\p{N}_/-]*/u)[0].length;
+    el.value=el.value.slice(0,completion.start)+value+el.value.slice(completion.end+suffix);
+    const pos=completion.start+value.length,entry=C.findBlock(data,editing.id);entry.block.text=el.value;changed(entry.page.id);el.focus();el.setSelectionRange(pos,pos);document.querySelectorAll('.suggestions').forEach(e=>e.remove());suggestions=[];completion=null;resizeEditors();return;
+  }
   const {start,end,type}=completion,close=type==='page'?']]':'))',value=(type==='page'?'[[':'((')+s.value+close;
   el.value=el.value.slice(0,start)+value+el.value.slice(linkCompletionEnd(el.value,end,close));const pos=start+value.length;
   const entry=C.findBlock(data,editing.id);entry.block.text=el.value;changed(entry.page.id);el.focus();el.setSelectionRange(pos,pos);document.querySelectorAll('.suggestions').forEach(e=>e.remove());suggestions=[];completion=null;resizeEditors();
@@ -203,7 +236,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='graph-filter')renderGraph(e.target.value);
   if(e.target.matches('[data-reference-filter]')){const q=e.target.value.toLocaleLowerCase();e.target.closest('details').querySelectorAll('.reference-group').forEach(g=>g.hidden=!g.textContent.toLocaleLowerCase().includes(q));}
 });
-document.addEventListener('focusout',e=>{if(e.target.matches('.block-editor')){const old=editing;setTimeout(()=>{if(editing===old&&!document.activeElement?.matches('.block-editor')&&!document.activeElement?.closest('.suggestions')&&!$('#modal').open&&!document.querySelector('#dictionary-dialog[open]')){editing=null;if(materialize())changed();render();}},160);}});
+document.addEventListener('focusout',e=>{if(e.target.matches('.block-editor')){const old=editing;setTimeout(()=>{if(editing===old&&!document.activeElement?.matches('.block-editor')&&!document.activeElement?.closest('.suggestions,.live-writing-feedback')&&!$('#modal').open&&!document.querySelector('#dictionary-dialog[open]')){editing=null;if(materialize())changed();render();}},160);}});
 document.addEventListener('keydown',e=>{
   const mod=e.ctrlKey||e.metaKey;
   if(mod&&['k','u'].includes(e.key.toLowerCase())){e.preventDefault();search();return;}
@@ -216,6 +249,7 @@ document.addEventListener('keydown',e=>{
   if(!editing)editing={id:e.target.dataset.editor,scope:e.target.closest('[data-scope]').dataset.scope};
   const el=e.target,entry=C.findBlock(data,el.dataset.editor),id=entry.block.id,pos=el.selectionStart;
   if(stepOverLinkClose(el,e)){e.preventDefault();complete(el);return;}
+  if(e.key==='Escape'&&completion&&suggestions.length){e.preventDefault();suggestions=[];completion=null;document.querySelectorAll('.suggestions').forEach(box=>box.remove());return;}
   if(completion&&suggestions.length&&['ArrowDown','ArrowUp','Enter','Tab'].includes(e.key)) {
     e.preventDefault();if(e.key==='Enter'||e.key==='Tab')acceptSuggestion(suggestionIndex);
     else {suggestionIndex=(suggestionIndex+(e.key==='ArrowDown'?1:-1)+suggestions.length)%suggestions.length;document.querySelectorAll('[data-suggestion]').forEach((b,i)=>b.classList.toggle('selected',i===suggestionIndex));}return;
@@ -251,7 +285,10 @@ function nameDialog(rename=false) {
   $('#page-name').focus();$('#page-name').select();$('#name-form').onsubmit=e=>{e.preventDefault();try{checkpoint();const title=$('#page-name').value.trim();if(rename){C.renamePage(data,current,title);changed(current);render();}else openPage(title);$('#modal').close();}catch(err){toast(err.message);}};
 }
 function search() {editing=null;render();$('#modal-content').innerHTML='<input class="search-input" id="search-input" aria-label="Buscar ou criar página" placeholder="Buscar ou criar página…" autocomplete="off"><div class="search-results" id="search-results"></div><div class="search-footer">Enter abre o primeiro resultado · Esc fecha · Shift+clique abre no painel lateral</div>';if(!$('#modal').open)$('#modal').showModal();$('#search-input').focus();searchResults('');$('#search-input').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#search-results button')?.click();}};}
-function searchResults(value) {const q=value.trim().toLocaleLowerCase();let pages=data.pages.filter(p=>p.title.toLocaleLowerCase().includes(q)).slice(0,12);const blocks=q?C.walkBlocks(data.pages).filter(e=>e.block.text.toLocaleLowerCase().includes(q)).slice(0,20):[];$('#search-results').innerHTML=pages.map(p=>`<button class="search-result" data-search-page="${esc(p.title)}">▤ &nbsp;${esc(p.title)}</button>`).join('')+blocks.map(e=>`<button class="search-result" data-search-block="${esc(e.block.id)}">• &nbsp;${esc(e.block.text.slice(0,180))}<small>${esc(e.page.title)}</small></button>`).join('')+(value.trim()&&!C.findPage(data,value.trim())?`<button class="search-result" data-search-page="${esc(value.trim())}">+ Criar página “${esc(value.trim())}”</button>`:'');}
+function searchResults(value) {
+  const items=pageSuggestions(data,value,13),pages=items.filter(item=>item.kind==='page').slice(0,12),blocks=value.trim()?blockSuggestions(data,value,{limit:20}):[],create=items.find(item=>item.kind==='create');
+  $('#search-results').innerHTML=pages.map(p=>`<button class="search-result" data-search-page="${esc(p.value)}">▤ &nbsp;${esc(p.label)}</button>`).join('')+blocks.map(b=>`<button class="search-result" data-search-block="${esc(b.value)}">• &nbsp;${esc(b.text||b.label)}<small>${esc(b.description)}</small></button>`).join('')+(create?`<button class="search-result" data-search-page="${esc(create.value)}">+ ${esc(create.label)}</button>`:'');
+}
 function download(name,content,type='application/json') {const url=URL.createObjectURL(new Blob([content],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
 function appearance() {
   const preference=document.documentElement.dataset.themePreference||'light';
@@ -288,6 +325,10 @@ document.addEventListener('click',async e=>{
   try {
     const t=e.target;
     if(t.closest('[data-command],[data-feature],[data-sync-open]'))return;
+    const references=t.closest('[data-block-references]');if(references){openBlock(references.dataset.blockReferences,e.shiftKey);return;}
+    const referenceInsert=t.closest('[data-insert-reference]');if(referenceInsert){beginReference(referenceInsert.dataset.insertReference);return;}
+    const connectionJump=t.closest('[data-show-connections]');if(connectionJump){const panel=$('#main').querySelector('[data-connections]');if(panel){panel.open=true;panel.scrollIntoView({behavior:'smooth',block:'start'});}return;}
+    const internal=t.closest('a[href^="#p/"]');if(internal&&e.shiftKey){const parts=internal.getAttribute('href').slice(1).split('/').map(decodeURIComponent);if(parts[3])openBlock(parts[3],true);else if(pageById(parts[1]))pushRight(parts[1]);e.preventDefault();return;}
     const closeCard=t.closest('[data-close-card]');if(closeCard){rightStack=rightStack.filter(x=>x.key!==closeCard.dataset.closeCard);renderRight();return;}
     const extra=t.closest('[data-add-to-page]');if(extra){checkpoint();const p=pageById(extra.dataset.addToPage),b=C.newBlock();p.blocks.push(b);changed(p.id);edit(b.id,'journal-'+p.id,null,false);return;}
     const queryEdit=t.closest('[data-query-builder]');if(queryEdit){F.execute('query',queryEdit.dataset.queryBuilder);return;}
@@ -314,15 +355,15 @@ document.addEventListener('click',async e=>{
     const del=t.closest('[data-delete-block]');if(del){checkpoint();const entry=C.findBlock(data,del.dataset.deleteBlock);C.removeBlock(data,entry.block.id);changed(entry.page.id);editing=null;render();$('#modal').close();return;}
     const dupe=t.closest('[data-duplicate]');if(dupe){checkpoint();const entry=C.findBlock(data,dupe.dataset.duplicate),clone=b=>({...b,id:C.uid(),children:b.children.map(clone)});entry.siblings.splice(entry.index+1,0,clone(entry.block));changed(entry.page.id);render();$('#modal').close();return;}
     const mention=t.closest('[data-link-mention]');if(mention){checkpoint();const entry=C.findBlock(data,mention.dataset.linkMention),title=mention.dataset.title,index=C.unlinkedMentionIndex(entry.block.text,title);if(index>=0)entry.block.text=entry.block.text.slice(0,index)+`[[${title}]]`+entry.block.text.slice(index+title.length);changed(entry.page.id);render();return;}
-    const go=t.closest('[data-goto]');if(go&&!t.closest('a')){openBlock(go.dataset.goto,e.shiftKey);return;}
+    const go=t.closest('[data-goto]');if(go&&!t.closest('a,button,input,select,textarea,summary,[data-edit]')){openBlock(go.dataset.goto,e.shiftKey);return;}
     const editTarget=t.closest('[data-edit]');if(editTarget&&!t.closest('a,input,select,button,textarea,video,audio,iframe,.trama-component'))edit(editTarget.dataset.edit,editTarget.closest('[data-scope]').dataset.scope);
   }catch(err){toast(err.message);}
 });
 let dragged=null;
-document.addEventListener('dragstart',e=>{const dot=e.target.closest('[data-zoom]');if(!dot)return;dragged=dot.dataset.zoom;e.dataTransfer.setData('text/plain',`((${dragged}))`);e.dataTransfer.effectAllowed='move';});
-document.addEventListener('dragover',e=>{if(!dragged)return;const line=e.target.closest('.block-line');if(line){e.preventDefault();document.querySelectorAll('.drag-target').forEach(el=>el.classList.remove('drag-target'));line.classList.add('drag-target');}});
+document.addEventListener('dragstart',e=>{const dot=e.target.closest('[data-zoom]');if(!dot)return;dragged=dot.dataset.zoom;e.dataTransfer.setData('text/plain',`((${dragged}))`);e.dataTransfer.effectAllowed='copyMove';});
+document.addEventListener('dragover',e=>{if(!dragged)return;const line=e.target.closest('.block-line');if(line){e.preventDefault();e.dataTransfer.dropEffect=e.ctrlKey||e.metaKey?'copy':'move';document.querySelectorAll('.drag-target').forEach(el=>el.classList.remove('drag-target'));line.classList.add('drag-target');}});
 document.addEventListener('dragend',()=>{dragged=null;document.querySelectorAll('.drag-target').forEach(el=>el.classList.remove('drag-target'));});
-document.addEventListener('drop',e=>{if(!dragged)return;const target=e.target.closest('[data-id]');if(!target)return;e.preventDefault();const source=C.findBlock(data,dragged),dest=C.findBlock(data,target.dataset.id);if(!source||!dest||source.block.id===dest.block.id)return;const descendant=(b,id)=>b.id===id||b.children.some(c=>descendant(c,id));if(descendant(source.block,dest.block.id)){toast('Um bloco não pode ser movido para dentro de si mesmo.');return;}checkpoint();source.siblings.splice(source.index,1);if(e.shiftKey){dest.block.children.push(source.block);dest.block.collapsed=false;}else{const updated=C.findBlock(data,dest.block.id);updated.siblings.splice(updated.index+1,0,source.block);}if(!source.page.blocks.length)source.page.blocks.push(C.newBlock());changed(source.page.id);changed(dest.page.id);editing=null;dragged=null;render();});
+document.addEventListener('drop',e=>{if(!dragged)return;const target=e.target.closest('[data-id]');if(!target)return;e.preventDefault();try{checkpoint();const result=transferBlock(data,dragged,target.dataset.id,{reference:e.ctrlKey||e.metaKey,asChild:e.shiftKey});for(const page of result.pageIds)changed(page);editing=null;render();}catch(error){toast(error.message);}finally{dragged=null;document.querySelectorAll('.drag-target').forEach(el=>el.classList.remove('drag-target'));}});
 $('#import-file').addEventListener('change',async e=>{
   const file=e.target.files[0];e.target.value='';if(!file)return;
   try {if(file.size>30*1024*1024)throw Error('O arquivo excede 30 MB.');const imported=C.importData(JSON.parse(await file.text()));
@@ -405,6 +446,7 @@ async function init() {
   catch(e){status('Falha ao abrir',true);$('#main').innerHTML=`<h1>Não foi possível abrir o grafo</h1><p>${esc(e.message)}</p><p>Inicie o Trama com <code>start.cmd</code> no Windows ou <code>bash start.sh</code> no Linux e abra o endereço exibido.</p>`;}
 }
 const featureContext={get data(){return data;},get page(){return pageById(current);},get editing(){return editing;},get revision(){return revision;},finishEditing(){editing=null;},checkpoint,changed,render,edit,toast,modal,openPage,download,flush,backup,
+  beginReference,
   localState,syncHold:key=>liveSync?.hold(key),syncRelease:key=>liveSync?.release(key),
   language:()=>proofLanguage,setLanguage:language=>{proofLanguage=language;try{localStorage.setItem('trama-proof-language',language);}catch{}document.querySelectorAll('.block-editor').forEach(el=>el.lang=language);},
   replaceData:async state=>{checkpoint();data=C.importData(state);current=data.pages[0]?.id;rightStack=[];right=null;editing=null;zoom=null;view=current?'page':'pages';changed();render();if(!await flush())throw Error('Não foi possível salvar a restauração.');history.replaceState(null,'',current?'#p/'+current:'#pages');},

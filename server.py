@@ -188,7 +188,7 @@ class Store:
 
 
 class Handler(SimpleHTTPRequestHandler):
-    server_version = "Trama/0.10.2"
+    server_version = "Trama/0.11"
     extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".wasm": "application/wasm"}
 
     def __init__(self, *args, **kwargs):

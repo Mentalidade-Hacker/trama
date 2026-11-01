@@ -17,7 +17,7 @@ export function wordAtSelection(element) {
 }
 
 export function setupLiveWriting(ctx) {
-  const states=new WeakMap(),connectedStates=new Set();let active=null,grammarBusy=false,grammarStatus=null,statusTime=0;
+  const states=new WeakMap(),connectedStates=new Set();let active=null,grammarBusy=false,grammarStatus=null,statusTime=0,panelSequence=0;
   let enabled=true,ignored={};
   try{enabled=localStorage.getItem('trama-live-writing')!=='off';ignored=JSON.parse(localStorage.getItem('trama-spell-ignored')||'{}');if(!ignored||typeof ignored!=='object'||Array.isArray(ignored))ignored={};}catch{}
   const language=el=>validLanguage(el.dataset.writingLanguage)||(el.matches('#practice-attempt')?validLanguage(el.lang):null)||ctx.language();
@@ -31,8 +31,8 @@ export function setupLiveWriting(ctx) {
     const shell=document.createElement('div');shell.className='live-editor-shell';
     el.before(shell);shell.append(el);el.classList.add('live-writing-input');
     const mirror=document.createElement('div');mirror.className='live-writing-mirror';mirror.setAttribute('aria-hidden','true');const mirrorText=document.createElement('div');mirror.append(mirrorText);shell.prepend(mirror);
-    const panel=document.createElement('div');panel.className='live-writing-feedback';panel.setAttribute('aria-label','Sugestões enquanto escreve');shell.after(panel);
-    state={el,shell,mirror,mirrorText,panel,sequence:0,spell:[],local:[],grammar:[],snapshot:el.value,selected:null,spellMessage:'',localMessage:'',grammarMessage:'',composing:false,spellTimer:null,grammarTimer:null,localTimer:null};
+    const panel=document.createElement('div');panel.className='live-writing-feedback';panel.id='live-writing-'+(++panelSequence);panel.setAttribute('aria-label','Sugestões enquanto escreve');shell.after(panel);
+    state={el,shell,mirror,mirrorText,panel,sequence:0,spell:[],local:[],grammar:[],snapshot:el.value,selected:null,expanded:false,spellMessage:'',localMessage:'',grammarMessage:'',spellError:'',grammarError:'',limitError:'',composing:false,spellTimer:null,grammarTimer:null,localTimer:null};
     states.set(el,state);
     panel.addEventListener('pointerdown',event=>{if(event.target.closest('button'))event.preventDefault();});
     panel.addEventListener('click',event=>event.stopPropagation());
@@ -62,10 +62,21 @@ export function setupLiveWriting(ctx) {
     const items=enabled?matches(state):[];let text='',position=0;
     for(const match of items){text+=esc(state.el.value.slice(position,match.offset));text+=`<mark class="${match.rule?.issueType==='misspelling'?'live-spelling-mark':'live-grammar-mark'}">${esc(state.el.value.slice(match.offset,match.offset+match.length))||'\u200b'}</mark>`;position=match.offset+match.length;}
     text+=esc(state.el.value.slice(position))+'\u200b';state.mirrorText.innerHTML=text;syncMirror(state);
-    if(!enabled){state.panel.hidden=true;return;}state.panel.hidden=false;
-    const problem=state.selected?items.find(item=>item.offset===state.selected.offset&&item.length===state.selected.length&&item.rule?.issueType===state.selected.rule?.issueType):null;
-    state.panel.innerHTML=`<div class="live-writing-summary"><span class="live-status" role="status">${esc(state.spellMessage||'Ortografia local ativa')}${state.localMessage?' · '+esc(state.localMessage):''}${state.grammarMessage?' · '+esc(state.grammarMessage):''}</span><button type="button" class="live-help" title="Configurar revisão ao digitar">⚙</button></div>${items.length?`<div class="live-issues">${items.slice(0,10).map((match,index)=>`<button type="button" data-live-issue="${index}" class="${match.rule?.issueType==='misspelling'?'live-spelling-issue':'live-grammar-issue'}" title="${esc(match.message)}">${esc(state.el.value.slice(match.offset,match.offset+match.length)||'Pontuação')} <span>${match.source==='local-basic'?'regra local':match.rule?.issueType==='misspelling'?'ortografia':'gramática'}</span></button>`).join('')}${items.length>10?`<span>+${items.length-10} ocorrências</span>`:''}</div>`:''}${problem?`<div class="live-suggestion"><strong>${esc(problem.rule?.issueType==='misspelling'?'Possível palavra incorreta':'Sugestão de escrita')}</strong><p>${esc(problem.message)}</p><div class="live-replacements">${(problem.replacements||[]).slice(0,6).map((replacement,index)=>`<button type="button" data-live-fix="${index}">${esc(replacement.value||'Remover')}</button>`).join('')||'<span>Buscando sugestões…</span>'}</div><div class="live-suggestion-tools"><button type="button" data-live-dictionary>Ver significado</button>${problem.replacements?.length?'<button type="button" data-live-learn>Entender e praticar</button>':''}${problem.rule?.issueType==='misspelling'?'<button type="button" data-live-accept>Aceitar esta palavra</button>':''}<button type="button" data-live-dismiss>Fechar sugestões</button></div></div>`:''}`;
-    state.panel.querySelector('.live-help').onclick=settings;
+    if(!enabled){state.panel.hidden=true;return;}
+    const errors=[state.limitError,state.spellError,state.grammarError].filter(Boolean);
+    state.panel.hidden=!items.length&&!errors.length&&!state.expanded;
+    if(state.panel.hidden){state.panel.innerHTML='';return;}
+    // Uma resposta tardia não deve tirar o foco de quem navega pelos botões.
+    const focused=state.panel.contains?.(document.activeElement)?document.activeElement:null;
+    const focusKey=focused?['liveToggle','liveIssue','liveFix','liveAccept','liveDismiss','liveDictionary','liveLearn','liveSettings'].find(key=>Object.hasOwn(focused.dataset,key)):null;
+    const focusValue=focusKey?focused.dataset[focusKey]:null;
+    const problem=state.expanded&&state.selected?items.find(item=>item.offset===state.selected.offset&&item.length===state.selected.length&&item.rule?.issueType===state.selected.rule?.issueType):null;
+    const count=items.length?`${items.length} ${items.length===1?'sugestão':'sugestões'}`:'Revisão';
+    const detailsId=state.panel.id+'-details';
+    const engines=[state.spellMessage,state.localMessage,state.grammarMessage].filter(Boolean).join(' · ');
+    state.panel.innerHTML=`<div class="live-writing-summary"><span class="live-status" role="status" aria-live="polite" aria-atomic="true"><button type="button" class="live-count" data-live-toggle aria-expanded="${state.expanded}" aria-controls="${detailsId}">${esc(count)} <span aria-hidden="true">${state.expanded?'⌃':'⌄'}</span></button></span><button type="button" class="live-help" data-live-settings title="Idioma e revisão ao digitar" aria-label="Idioma e revisão ao digitar">⚙</button></div>${errors.map(message=>`<p class="live-check-error" role="alert">${esc(message)}</p>`).join('')}<div id="${detailsId}" class="live-review-details"${state.expanded?'':' hidden'}>${state.expanded?`<p class="live-engine-status">${esc(engines||'Revisão local enquanto você escreve.')}</p>${items.length?`<div class="live-issues">${items.slice(0,10).map((match,index)=>`<button type="button" data-live-issue="${index}" class="${match.rule?.issueType==='misspelling'?'live-spelling-issue':'live-grammar-issue'}" title="${esc(match.message)}">${esc(state.el.value.slice(match.offset,match.offset+match.length)||'Pontuação')} <span>${match.source==='local-basic'?'regra local':match.rule?.issueType==='misspelling'?'ortografia':'gramática'}</span></button>`).join('')}${items.length>10?`<span>+${items.length-10} ocorrências</span>`:''}</div>`:''}${problem?`<div class="live-suggestion"><strong>${esc(problem.rule?.issueType==='misspelling'?'Possível palavra incorreta':'Sugestão de escrita')}</strong><p>${esc(problem.message)}</p><div class="live-replacements">${(problem.replacements||[]).slice(0,6).map((replacement,index)=>`<button type="button" data-live-fix="${index}">${esc(replacement.value||'Remover')}</button>`).join('')||'<span>Buscando sugestões…</span>'}</div><div class="live-suggestion-tools"><button type="button" data-live-dictionary>Ver significado</button>${problem.replacements?.length?'<button type="button" data-live-learn>Entender e praticar</button>':''}${problem.rule?.issueType==='misspelling'?'<button type="button" data-live-accept>Aceitar esta palavra</button>':''}<button type="button" data-live-dismiss>Fechar explicação</button></div></div>`:''}`:''}</div>`;
+    state.panel.querySelector('[data-live-settings]').onclick=settings;
+    state.panel.querySelector('[data-live-toggle]').onclick=()=>{state.expanded=!state.expanded;if(!state.expanded)state.selected=null;paint(state);};
     state.panel.querySelectorAll('[data-live-issue]').forEach(button=>button.onclick=()=>selectIssue(state,Number(button.dataset.liveIssue)));
     if(problem){
       state.panel.querySelectorAll('[data-live-fix]').forEach(button=>button.onclick=()=>{
@@ -77,11 +88,12 @@ export function setupLiveWriting(ctx) {
       const accept=state.panel.querySelector('[data-live-accept]');if(accept)accept.onclick=()=>{const lang=language(state.el),word=fold(state.el.value.slice(problem.offset,problem.offset+problem.length));ignored[lang]=[...new Set([...ignoredWords(lang),word])].slice(-5000);try{localStorage.setItem('trama-spell-ignored',JSON.stringify(ignored));}catch{}schedule(state,true);};
       state.panel.querySelector('[data-live-dismiss]').onclick=()=>{state.selected=null;paint(state);};
     }
+    if(focusKey){const attr='data-'+focusKey.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase());const target=[...state.panel.querySelectorAll('['+attr+']')].find(node=>node.dataset[focusKey]===focusValue)||state.panel.querySelector('[data-live-toggle]');target?.focus({preventScroll:true});}
   }
 
   async function selectIssue(state,index) {
     const issue=matches(state)[index];if(!issue)return;
-    state.selected=issue;paint(state);
+    state.expanded=true;state.selected=issue;paint(state);
     if(issue.rule?.issueType!=='misspelling'||issue.replacements?.length)return;
     const snapshot=state.snapshot,token=state.sequence;
     try{const result=await spellingRequest({action:'suggest',word:snapshot.slice(issue.offset,issue.offset+issue.length),language:language(state.el)});if(!current(state)||state.sequence!==token||state.el.value!==snapshot)return;issue.replacements=result.replacements||[];if(!issue.replacements.length)issue.message+=' Nenhuma substituição próxima foi encontrada; confira no dicionário.';paint(state);if(!issue.replacements.length){const node=state.panel.querySelector('.live-replacements');if(node)node.textContent='Sem sugestões automáticas para esta palavra.';}}
@@ -90,10 +102,10 @@ export function setupLiveWriting(ctx) {
 
   function schedule(state,checkCurrent=false) {
     if(active&&active!==state&&!active.el.isConnected){active.observer.disconnect();clearTimeout(active.spellTimer);clearTimeout(active.grammarTimer);clearTimeout(active.localTimer);}
-    active=state;state.sequence++;state.snapshot=state.el.value;state.spell=[];state.local=[];state.grammar=[];state.selected=null;state.localMessage='';
+    active=state;state.sequence++;state.snapshot=state.el.value;state.spell=[];state.local=[];state.grammar=[];state.selected=null;state.expanded=false;state.localMessage='';state.spellError='';state.grammarError='';state.limitError='';
     clearTimeout(state.spellTimer);clearTimeout(state.grammarTimer);clearTimeout(state.localTimer);
     if(!enabled||state.composing){paint(state);return;}
-    if(state.el.value.length>20000){state.spellMessage='Divida o texto: revisão automática até 20 mil caracteres por bloco.';state.grammarMessage='';paint(state);return;}
+    if(state.el.value.length>20000){state.limitError='Divida o texto: revisão automática até 20 mil caracteres por bloco.';state.spellMessage='';state.grammarMessage='';paint(state);return;}
     state.spellMessage='Verificando ortografia…';state.grammarMessage='';paint(state);
     const completed=/[\s.,;:!?()[\]{}]$/.test(state.el.value.slice(0,state.el.selectionStart));
     state.localTimer=setTimeout(()=>checkLocal(state),checkCurrent?0:100);
@@ -112,7 +124,7 @@ export function setupLiveWriting(ctx) {
     if(!current(state)||state.composing)return;
     const token=state.sequence,snapshot=state.el.value,lang=language(state.el);
     try{const result=await spellingRequest({action:'check',text:snapshot,language:lang,caret:state.el.selectionStart,checkCurrent,ignored:ignoredWords(lang)});if(!current(state)||token!==state.sequence||snapshot!==state.el.value)return;state.spell=(result.matches||[]).filter(match=>!isProtectedRange(snapshot,match.offset,match.length));state.spellMessage=state.spell.length?`${state.spell.length} ${state.spell.length===1?'alerta de ortografia':'alertas de ortografia'}`:'Ortografia verificada';paint(state);}
-    catch(error){if(current(state)&&token===state.sequence){state.spellMessage=error.message;paint(state);}}
+    catch(error){if(current(state)&&token===state.sequence){state.spellError=error.message;state.spellMessage='Ortografia indisponível';paint(state);}}
   }
 
   async function status() {
@@ -134,7 +146,7 @@ export function setupLiveWriting(ctx) {
       if(response.status===409){state.grammarMessage='aguardando o corretor…';state.grammarTimer=setTimeout(()=>checkGrammar(state),1000);paint(state);return;}
       if(!response.ok)throw Error(result.error||'Gramática local indisponível');
       state.grammar=(result.matches||[]).filter(match=>match.rule?.issueType!=='misspelling'&&!isProtectedRange(snapshot,match.offset,match.length));state.grammarMessage=state.grammar.length?`${state.grammar.length} ${state.grammar.length===1?'sugestão da gramática ampliada':'sugestões da gramática ampliada'}`:'gramática ampliada verificada';paint(state);
-    }catch(error){if(current(state)&&token===state.sequence){state.grammarMessage=error.message;paint(state);}}
+    }catch(error){if(current(state)&&token===state.sequence){state.grammarError=error.message;state.grammarMessage='Gramática ampliada indisponível';paint(state);}}
     finally{grammarBusy=false;}
   }
 

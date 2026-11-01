@@ -135,7 +135,7 @@ def write_inventory(stage):
     return target
 
 
-def build(source, runtime, iscc, csc, output, version='0.10.2', work=None,
+def build(source, runtime, iscc, csc, output, version='0.11', work=None,
           runtime_package_sha256=None, runner=subprocess.run):
     version_key(version)
     source = plain_path(Path(source).absolute())
@@ -187,7 +187,7 @@ def main():
     parser.add_argument('--csc', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--work', type=Path)
-    parser.add_argument('--version', default='0.10.2')
+    parser.add_argument('--version', default='0.11')
     parser.add_argument('--runtime-package-sha256')
     args = parser.parse_args()
     print(json.dumps(build(**vars(args)), ensure_ascii=False))
